@@ -73,9 +73,13 @@ const handleRawMessage = async req => {
   headers.set('Access-Control-Allow-Origin', '*')
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers })
 
-  return new Response(JSON.stringify(await handleUnencryptedMessage(/** @type {Request} */ (await req.json()))), {
-    headers
-  })
+  try {
+    return new Response(JSON.stringify(await handleUnencryptedMessage(/** @type {Request} */ (await req.json()))), {
+      headers
+    })
+  } catch (err) {
+    return new Response('Unknown error')
+  }
 }
 
 /**

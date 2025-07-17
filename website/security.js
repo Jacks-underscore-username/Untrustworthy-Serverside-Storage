@@ -206,7 +206,10 @@ export const connectToServer = async (address, username, password) => {
    * @returns {Promise<any>}
    */
   const getFile = async filePath => {
-    const response = await messageServer({ command: 'get_file', file_name: await hashFilePath(filePath) })
+    const response = await messageServer({
+      command: 'get_file',
+      file_name: await hashFilePath(filePath)
+    })
     if (response.status === 'success') return JSON.parse(await decryptData(response.file))
     throw new Error('Missing file')
   }
@@ -224,7 +227,7 @@ export const connectToServer = async (address, username, password) => {
     })
 
   /**
-   * @typedef {{[key: string]: Index | true | undefined}} Index
+   * @typedef {{[key: string]: Index | string | undefined}} Index
    * @returns {Promise<Index>}
    */
   const getIndex = async () => {
@@ -253,9 +256,12 @@ export const connectToServer = async (address, username, password) => {
       if (nextFolder !== undefined && typeof nextFolder === 'object') parentFolder = nextFolder
       else throw new Error('Conflicting file / folder')
     }
-    parentFolder[splitPath[0]] = true
-    baseSaveFile('index.json', index)
-    baseSaveFile(filePath, data)
+    const fileHash = arrayBufferToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(data)))
+    if (parentFolder[splitPath[0]] !== fileHash) {
+      parentFolder[splitPath[0]] = fileHash
+      baseSaveFile('index.json', index)
+      baseSaveFile(filePath, data)
+    }
   }
 
   /**
@@ -271,7 +277,10 @@ export const connectToServer = async (address, username, password) => {
       parentFolder = parentFolder[part]
     delete parentFolder[splitPath[0]]
     await saveFile('index.json', index)
-    await messageServer({ command: 'delete_file', file_name: await hashFilePath(filePath) })
+    await messageServer({
+      command: 'delete_file',
+      file_name: await hashFilePath(filePath)
+    })
   }
 
   return { getFile, saveFile, deleteFile, getIndex }
