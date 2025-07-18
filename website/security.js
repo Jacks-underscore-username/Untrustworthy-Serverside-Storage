@@ -7,9 +7,10 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
  * @param {URL} address
  * @param {string} username
  * @param {string} password
+ * @param {string} [service]
  * @returns {Promise<{getFile:(fileName:string)=>Promise<any>,saveFile:(fileName:string,data:any)=>Promise<void>,deleteFile:(filePath:string)=>Promise<void>,getIndex:()=>Promise<Index>}>}
  */
-export const connectToServer = async (address, username, password) => {
+export const connectToServer = async (address, username, password, service = '') => {
   const keyPair = await makeKeyPair()
   const clientPublicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
 
@@ -106,22 +107,27 @@ export const connectToServer = async (address, username, password) => {
     )
     return decrypted
   }
-
+  /** @type {string} */
   const seed = await messageServer({ command: 'get_seed', username })
+
+  const token = [seed, service, address, username, password].join('')
 
   await messageServer({
     command: 'prove_seed',
     hashedSeed: arrayBufferToBase64(
-      new Uint8Array(await crypto.subtle.digest('SHA-512', new TextEncoder().encode(`${seed}${username}${password}`)))
+      new Uint8Array(
+        await crypto.subtle.digest(
+          'SHA-512',
+          new TextEncoder().encode([seed, service, address, password, username].join(''))
+        )
+      )
     )
   })
 
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(
-      arrayBufferToBase64(
-        new Uint8Array(await crypto.subtle.digest('SHA-512', new TextEncoder().encode(`${password}${username}${seed}`)))
-      )
+      arrayBufferToBase64(new Uint8Array(await crypto.subtle.digest('SHA-512', new TextEncoder().encode(token))))
     ),
     'PBKDF2',
     false,
@@ -196,9 +202,7 @@ export const connectToServer = async (address, username, password) => {
    */
   const hashFilePath = async filePath =>
     arrayBufferToFileName(
-      new Uint8Array(
-        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${filePath}${seed}${username}${password}`))
-      )
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${filePath}${token}`)))
     )
 
   /**

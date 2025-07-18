@@ -3,8 +3,9 @@ import * as Security from './security.js'
   const usernameElement = /** @type {HTMLInputElement} */ (document.getElementById('username'))
   const passwordElement = /** @type {HTMLInputElement} */ (document.getElementById('password'))
   const urlElement = /** @type {HTMLInputElement} */ (document.getElementById('url'))
+  const serviceElement = /** @type {HTMLInputElement} */ (document.getElementById('service'))
 
-  const connectButton = /** @type {HTMLButtonElement} */ (document.querySelector('#connect > button'))
+  const connectForm = /** @type {HTMLFormElement} */ (document.getElementById('connect'))
   const saveButton = /** @type {HTMLButtonElement} */ (document.querySelector('#save > button'))
   const getButton = /** @type {HTMLButtonElement} */ (document.querySelector('#get > button'))
   const deleteButton = /** @type {HTMLButtonElement} */ (document.querySelector('#delete > button'))
@@ -23,27 +24,22 @@ import * as Security from './security.js'
   /** @type {Awaited<ReturnType<import('./security.js').connectToServer>>| undefined} */
   let api = undefined
 
-  connectButton.addEventListener('click', () => {
-    if (
-      usernameElement.value.trim().length === 0 ||
-      passwordElement.value.trim().length === 0 ||
-      urlElement.value.trim().length === 0
-    ) {
-      connectButton.classList.add('invalid')
-      setTimeout(() => connectButton.classList.remove('invalid'), 1000)
-    } else
-      Security.connectToServer(
-        new URL(urlElement.value.trim()),
-        usernameElement.value.trim(),
-        passwordElement.value.trim()
-      ).then(result => {
-        api = result
-        apiWrapper.classList.add('ready')
-      })
+  connectForm.addEventListener('submit', event => {
+    event.preventDefault()
+    Security.connectToServer(
+      new URL(urlElement.value.trim()),
+      usernameElement.value.trim(),
+      passwordElement.value.trim(),
+      serviceElement.value.trim()
+    ).then(result => {
+      api = result
+      apiWrapper.classList.add('ready')
+    })
+    clearOthers()
   })
 
   /**
-   * @param {'save' | 'get' | 'delete' | 'index'} self
+   * @param {'save' | 'get' | 'delete' | 'index'} [self]
    */
   const clearOthers = self => {
     if (self !== 'save') {
