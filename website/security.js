@@ -14,6 +14,8 @@ export const connectToServer = async (address, username, password, service = '')
   const keyPair = await makeKeyPair()
   const clientPublicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
 
+  console.log(`${address}`)
+
   const { public_key: serverPublicKeyJwk, id } = await (
     await fetch(address, {
       method: 'POST',

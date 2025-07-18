@@ -56,6 +56,37 @@ textarea {
   min-height: 250px;
 }
 
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: #151515;
+  margin: 0;
+
+  font: inherit;
+  width: 1.15em;
+  height: 1.15em;
+  border: 2px solid #999;
+  border-radius: 0.15em;
+  transform: translateY(-0.075em);
+
+  display: grid;
+  place-content: center;
+}
+
+input[type="checkbox"]::before {
+  content: "";
+  width: 0.65em;
+  height: 0.65em;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  transform: scale(0);
+  transform-origin: bottom left;
+  background-color: #0f0;
+}
+
+input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
 #connect {
   display: flex;
   flex-direction: column;
@@ -68,16 +99,28 @@ textarea {
   border-radius: 15px;
 }
 
+#connect > .item {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+#connect > .item > span {
+  font-weight: bold;
+  color: #fff;
+}
+
 #api {
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 50px;
-  filter: blur(5px);
+  display: none;
 }
 
 #api.ready {
-  filter: none;
+  display: inherit;
 }
 
 #api > .item {

@@ -1,5 +1,5 @@
 import * as Security from './security.js'
-;(async () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const usernameElement = /** @type {HTMLInputElement} */ (document.getElementById('username'))
   const passwordElement = /** @type {HTMLInputElement} */ (document.getElementById('password'))
   const urlElement = /** @type {HTMLInputElement} */ (document.getElementById('url'))
@@ -24,8 +24,25 @@ import * as Security from './security.js'
   /** @type {Awaited<ReturnType<import('./security.js').connectToServer>>| undefined} */
   let api = undefined
 
+  for (const element of [usernameElement, passwordElement, urlElement, serviceElement]) {
+    const toggle = /** @type {HTMLInputElement} */ (element.parentElement?.querySelector('input.toggle'))
+    const key = element.id
+    if (localStorage.getItem(key) !== null) {
+      toggle.checked = true
+      element.value = localStorage.getItem(key) ?? ''
+    }
+    toggle.addEventListener('change', () => {
+      if (toggle.checked) localStorage.setItem(key, element.value)
+      else localStorage.removeItem(key)
+    })
+    element.addEventListener('input', () => {
+      if (toggle.checked) localStorage.setItem(key, element.value)
+    })
+  }
+
   connectForm.addEventListener('submit', event => {
     event.preventDefault()
+    connectForm.remove()
     Security.connectToServer(
       new URL(urlElement.value.trim()),
       usernameElement.value.trim(),
@@ -96,4 +113,4 @@ import * as Security from './security.js'
     api.getIndex().then(index => (indexContents.value = JSON.stringify(index, undefined, 2)))
     clearOthers('index')
   })
-})()
+})
