@@ -1,3 +1,11 @@
+const ERRORS = {
+  MISSING_FILE: 'Missing file',
+  MISSING_FOLDER: 'Missing folder',
+  FOLDER_IS_FILE: 'File exists where a folder should',
+  FILE_IS_FOLDER: 'Folder exists where a file should',
+  FILE_IS_LINK: 'Link links to link'
+}
+
 /**
  * @returns {Promise<CryptoKeyPair>}
  */
@@ -13,8 +21,6 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
 export const connectToServer = async (address, username, password, service = '') => {
   const keyPair = await makeKeyPair()
   const clientPublicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
-
-  console.log(`${address}`)
 
   const { public_key: serverPublicKeyJwk, id } = await (
     await fetch(address, {
@@ -211,13 +217,13 @@ export const connectToServer = async (address, username, password, service = '')
    * @param {string} filePath
    * @returns {Promise<any>}
    */
-  const getFile = async filePath => {
+  const baseGetFile = async filePath => {
     const response = await messageServer({
       command: 'get_file',
       file_name: await hashFilePath(filePath)
     })
     if (response.status === 'success') return JSON.parse(await decryptData(response.file))
-    throw new Error('Missing file')
+    throw new Error(ERRORS.MISSING_FILE)
   }
 
   /**
@@ -233,18 +239,65 @@ export const connectToServer = async (address, username, password, service = '')
     })
 
   /**
-   * @typedef {{[key: string]: Index | string | undefined}} Index
+   * @typedef {Object} Index_file
+   * @prop {'file'} type
+   * @prop {string} hash
+   * @typedef {Object} Index
+   * @prop {'folder'} type
+   * @prop {{[key: string]: (Index_file | Index)}} contents
    * @returns {Promise<Index>}
    */
   const getIndex = async () => {
     /** @type {Index} */
-    let index = {}
+    let index = {
+      type: 'folder',
+      contents: {}
+    }
     try {
-      index = await getFile('index.json')
+      index = await baseGetFile('index.json')
     } catch (err) {
       await baseSaveFile('index.json', index)
     }
     return index
+  }
+
+  /**
+   * @param {Index} index
+   * @param {string} fileHash
+   * @param {string} [folderPath]
+   * @returns {{ folder: Index, file: Index_file, filePath: string } | undefined}
+   */
+  const findFileByHash = (index, fileHash, folderPath) => {
+    for (const [name, entry] of Object.entries(index.contents)) {
+      const entryPath = folderPath === undefined ? name : `${folderPath}/${name}`
+      if (entry.type === 'folder') {
+        const result = findFileByHash(entry, fileHash, entryPath)
+        if (result !== undefined) return result
+      }
+      if (entry.type === 'file' && entry.hash === fileHash) return { folder: index, file: entry, filePath: entryPath }
+    }
+    return
+  }
+
+  /**
+   * @param {Index} index
+   * @param {string} folderPath
+   * @param {boolean} [makeFolders]
+   * @returns {Index}
+   */
+  const getIndexFolder = (index, folderPath, makeFolders = false) => {
+    if (!folderPath.length) return index
+    const splitPath = folderPath.split('/')
+    let parentFolder = index
+    for (let part = splitPath.shift() ?? ''; part.length; part = splitPath.shift() ?? '') {
+      if (parentFolder.contents[part] === undefined)
+        if (makeFolders) parentFolder.contents[part] = { type: 'folder', contents: {} }
+        else throw new Error(ERRORS.MISSING_FOLDER)
+      const nextEntry = parentFolder.contents[part]
+      if (nextEntry.type === 'folder') parentFolder = nextEntry
+      else throw new Error(ERRORS.FOLDER_IS_FILE)
+    }
+    return parentFolder
   }
 
   /**
@@ -255,19 +308,36 @@ export const connectToServer = async (address, username, password, service = '')
   const saveFile = async (filePath, data) => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
-    let parentFolder = index
-    for (let part = splitPath[0]; splitPath.length > 1; part = splitPath.shift() ?? '') {
-      if (parentFolder[part] === undefined) parentFolder[part] = {}
-      const nextFolder = parentFolder[part]
-      if (nextFolder !== undefined && typeof nextFolder === 'object') parentFolder = nextFolder
-      else throw new Error('Conflicting file / folder')
-    }
     const fileHash = arrayBufferToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(data)))
-    if (parentFolder[splitPath[0]] !== fileHash) {
-      parentFolder[splitPath[0]] = fileHash
-      baseSaveFile('index.json', index)
-      baseSaveFile(filePath, data)
+    const findResult = findFileByHash(index, fileHash)
+
+    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'), true)
+    if (parentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
+    if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+
+    if (findResult === undefined) await baseSaveFile(fileHash, data)
+
+    parentFolder.contents[splitPath[0]] = {
+      type: 'file',
+      hash: fileHash
     }
+
+    await baseSaveFile('index.json', index)
+  }
+
+  /**
+   * @param {string} filePath
+   * @returns {Promise<any>}
+   */
+  const getFile = async filePath => {
+    const index = await getIndex()
+    const splitPath = filePath.split('/')
+    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
+    if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    const entry = parentFolder.contents[splitPath[0]]
+    if (entry === undefined) throw new Error(ERRORS.MISSING_FILE)
+    if (entry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
+    if (entry.type === 'file') return await baseGetFile(entry.hash)
   }
 
   /**
@@ -277,16 +347,24 @@ export const connectToServer = async (address, username, password, service = '')
   const deleteFile = async filePath => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
-    let parentFolder = index
-    for (let part = splitPath[0]; splitPath.length > 1; part = splitPath.shift() ?? '')
-      // @ts-expect-error
-      parentFolder = parentFolder[part]
-    delete parentFolder[splitPath[0]]
-    await saveFile('index.json', index)
-    await messageServer({
-      command: 'delete_file',
-      file_name: await hashFilePath(filePath)
-    })
+    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
+    if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    const entry = parentFolder.contents[splitPath[0]]
+    if (entry === undefined) throw new Error(ERRORS.MISSING_FILE)
+    if (entry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
+    delete parentFolder.contents[splitPath[0]]
+    const findResult = findFileByHash(index, entry.hash)
+    if (findResult === undefined)
+      await messageServer({
+        command: 'delete_file',
+        file_name: await hashFilePath(entry.hash)
+      })
+    for (let subPath = filePath.split('/').slice(0, filePath.split('/').length - 1); subPath.length; subPath.pop()) {
+      const subParentFolder = getIndexFolder(index, subPath.join('/'))
+      if (Object.keys(subParentFolder.contents).length) break
+      delete getIndexFolder(index, subPath.slice(0, subPath.length - 1).join('/')).contents[subPath[subPath.length - 1]]
+    }
+    await baseSaveFile('index.json', index)
   }
 
   return { getFile, saveFile, deleteFile, getIndex }
