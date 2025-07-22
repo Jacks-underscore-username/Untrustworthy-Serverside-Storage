@@ -1,0 +1,91 @@
+|[color #fff size large default align center size xx-large color #0f0]I need a file server.
+|[break size x-large]One that I can access from any browser with just a username / password.
+|[break break reset]There are services that offer this already, but they all have some problems:
+|[break space color #0f0]*|[color] They cost money.
+|[break space color #0f0]*|[color] Have a storage limit.
+|[break space color #0f0]*|[color] Rate limiting.
+|[break space color #0f0]*|[color] Their apis (if they have any) are slow.
+|[break space color #0f0]*|[color] Don't work offline.
+|[break space color #0f0]*|[color] Aren't open source.
+|[break space color #0f0]*|[color] Have sketchy security.
+
+|[break break]So I'll just have to make my own |[size small](yay)|[size], so what features do I want?
+|[break space color #0f0]*|[color] Open source (obviously).
+|[break space color #0f0]*|[color] Runs locally (which also means it can work offline).
+|[break space color #0f0]*|[color] Fast apis.
+|[break space color #0f0]*|[color] Trustless security.
+
+|[break break italic size x-large]What do I mean by trustless security?|[italic size]
+
+|[break 1.5] I mean a system were the server can be a bad actor and not get your data, where man in the middle attacks do nothing, where the files never leave the client unencrypted.
+
+
+|[break size x-large align center] Part 1: |[color #0f0] Serving the server|[color size]
+|[fold open reset]
+
+|[break]To create the server I used nodejs (or |[link https://bun.com/ color #0f0]bun|[link color] to be specific), bun hsa a really nice easy to use |[link https://bun.com/docs/api/http color #0f0]server api|[link color], so it'll handle all the server stuff easily.
+
+|[fold]
+
+|[break size x-large align center]Part 2: |[color #0f0] Messaging the server|[color size]
+|[fold open reset]
+
+|[break]Now this |[italic]could|[italic] be easy, using https I would know that my messages aren't being messed with, but if I want to host this server myself I'd rather not have to set up the needed certificates.
+|[break 2]I've actually already done this before with some really cool math magic that is the |[link https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange color #0f0]Diffie-Hellman key exchange|[link color], it has to peers exchange public keys and use them to generate a shared key used for symmetric message encryption (illustration below).
+|[break align center script diffy.js] 
+
+|[fold]
+
+|[break size x-large align center]Part 3: |[color #0f0] Proving identity to the server|[color size]
+|[fold open reset]
+
+|[break]I can hardly just have any client able to claim to be any user, that would allow anyone full access to your files (which would do them no good, since they're still encrypted remember?), but more importantly it would allow them to delete your files / fill up your storage with junk files, so the server needs some way to know the client is who they say they are.
+
+|[break 2]One common way is to send the server your login info, but that isn't an option when you don't trust the server, the secret you send it has to only matter to it and be unusable to everyone else, one idea would be for the server to send a one-time code to new users that they remember and use as part of their login, but that would require them to write it down somewhere for each server they use.
+
+|[break 2]But with a little modifications that actually does work well, the server sends a "seed" to the client, who then hashes it + their login info to create a token that they send back to the server, if this is the first time the server has connected to this user it stores the token as their auth token, and if it's not the first time it compares the sent token to the stored token (illustrations below).
+
+|[break align center script prove_first.js]
+|[break 2 script prove_again.js] 
+
+|[fold]
+
+|[break size x-large align center]Part 4: |[color #0f0] Defining the api|[color size]
+|[fold open reset]
+
+|[break]Now that I have a server, and can safely message it without listening ears, and it knows who I am and won't let random people mess with my stuff, what do I need it to do? Since I don't want the server to know what my files are, and as little information about them as possible, I want a bare bones api that can only do low level stuff, reading, writing, and deleting files in a flat folder for the user.
+
+|[fold]
+
+|[break size x-large align center]Part 5: |[color #0f0] Using the api|[color size]
+|[fold open reset]
+
+|[break]I can now use the server to securely save files, but I don't want the server to be able to read them, so I need to encrypt them, the problem is a user's username + password + seed alone isn't enough data to create a secure key.
+|[break 2 size small]My first thought was to somehow have the server store the key in a way that it can't use it, but I wasn't able to find a way that that could work.
+|[break 2 reset]Unless... turns out I can |[link https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey#pbkdf2_derive_aes_key_from_password color #0f0]derive an AES key from a small string|[link color], and then use that base key + some extra random data per use to create a proper key, each file will have the used "salt" and "iv" stored with it in plaintext, but for once that's actually fine, and then they can be used to recreate the same key later to decrypt the file (illustrations below).
+
+|[break align center script encrypting.js]
+|[break 2 script decrypting.js] 
+
+|[fold]
+
+|[break size x-large align center]Part 6: |[color #0f0 italic size large][BONUS]|[italic size x-large] Adding a virtual filesystem|[color size]
+|[fold open reset]
+
+|[break italic]Now that everything's done it's time to use it, how about a basic file storage system, ok the user uploaded some images nice, and some text files... |[size small]oh now they want all of their images back, but I never recorded what was what, I don't even have a list of the files they have saved...|[reset]
+|[break 2]A slightly more extensive filesystem would do wonders, but making api calls to the server for every filesystem command is way too inefficient, so it needs to be a virtual filesystem.
+|[break 2]I can do this by having a main "index" file that stores the state of the filesystem, I just have to keep it updated, but doing this allows for a lot more features:
+|[break space color #0f0]*|[color] Folders.
+|[break space color #0f0]*|[color] Reading a folder's contents.
+|[break space color #0f0]*|[color] Automatic deduplication of files.|[size small]
+|[break space color #0f0]* *|[color] It stores the hash of each saved file in the index.
+|[break space color #0f0]* *|[color] When I delete a file it only deletes the real file if no other file in the index has the same hash.
+|[break space color #0f0]* *|[color] Whenever I save a file it first sees if it already have an identical file saved, if so it can skip saving the actual file.|[reset]
+|[break space color #0f0]*|[color] Auto creating folders as needed.
+|[break space color #0f0]*|[color] Auto deleting empty folders.
+|[break space color #0f0]*|[color] I can see errors / warning for overwriting a file, trying to read a file that doesn't exist etc before actually messaging the server.
+|[break space color #0f0]*|[color] Faster queries (since it doesn't have to query the server for each operation).
+
+|[fold]
+
+|[break 2 size x-large align center italic] That's all for this project for now, if you want to see any of the code you can see it on my |[color #0f0 link https://github.com/Jacks-underscore-username/Untrustworthy-Serverside-Storage]github|[link color].

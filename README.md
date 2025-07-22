@@ -1,0 +1,1 @@
+See [my post](https://jacks-project-hub.vercel.app/posts/Browser%20storage/) for info, or the notes folder for a tiny bit more
