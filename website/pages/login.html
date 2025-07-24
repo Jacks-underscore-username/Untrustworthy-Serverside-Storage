@@ -1,0 +1,24 @@
+<form id="connect" action="/login" method="POST">
+    <button type="submit" class="title">Connect</button>
+    <div class="item">
+        <input id="username" name="username" placeholder="Username" autocomplete="username" required />
+        <input class="toggle toggle-username" type="checkbox">
+        <span class="save">Save</span>
+    </div>
+    <div class="item">
+        <input id="password" name="password" placeholder="Password" type="password" autocomplete="current-password"
+            required />
+        <input class="toggle toggle-password" type="checkbox">
+        <span class="save">Save</span>
+    </div>
+    <div class="item">
+        <input id="url" name="url" placeholder="URL" type="url" autocomplete="url" required />
+        <input class="toggle toggle-url" type="checkbox">
+        <span class="save">Save</span>
+    </div>
+    <div class="item">
+        <input id="service" name="service" placeholder="Service" />
+        <input class="toggle toggle-service" type="checkbox">
+        <span class="save">Save</span>
+    </div>
+</form>

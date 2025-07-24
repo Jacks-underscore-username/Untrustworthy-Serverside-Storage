@@ -17,13 +17,13 @@
 
 |[break break italic size x-large]What do I mean by trustless security?|[italic size]
 
-|[break 1.5] I mean a system were the server can be a bad actor and not get your data, where man in the middle attacks do nothing, where the files never leave the client unencrypted.
+|[break 1.5] I mean a system where the server can be a bad actor and not get your data, where man in the middle attacks do nothing, where the files never leave the client unencrypted.
 
 
 |[break size x-large align center] Part 1: |[color #0f0] Serving the server|[color size]
 |[fold open reset]
 
-|[break]To create the server I used nodejs (or |[link https://bun.com/ color #0f0]bun|[link color] to be specific), bun hsa a really nice easy to use |[link https://bun.com/docs/api/http color #0f0]server api|[link color], so it'll handle all the server stuff easily.
+|[break]To create the server I used nodejs (or |[link https://bun.com/ color #0f0]bun|[link color] to be specific), bun has a really nice easy to use |[link https://bun.com/docs/api/http color #0f0]server api|[link color], so it'll handle all the server stuff easily.
 
 |[fold]
 

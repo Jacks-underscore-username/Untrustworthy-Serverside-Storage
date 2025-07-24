@@ -2,60 +2,15 @@
 <html>
 
 <head>
-  <title>Demo</title>
+  <title id="title">Demo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet" />
-  <link href="styles.css" rel="stylesheet" />
-  <script defer type="module" src="script.js"></script>
+  <link href="sharedStyles.css" rel="stylesheet" />
+  <script defer type="module" src="pageManager.js"></script>
 </head>
 
 <body>
-  <form id="connect" action="/login" method="POST">
-    <button type="submit" class="title">Connect</button>
-    <div class="item">
-      <input id="username" name="username" placeholder="Username" autocomplete="username" required />
-      <input class="toggle toggle-username" type="checkbox">
-      <span class="save">Save</span>
-    </div>
-    <div class="item">
-      <input id="password" name="password" placeholder="Password" type="password" autocomplete="current-password"
-        required />
-      <input class="toggle toggle-password" type="checkbox">
-      <span class="save">Save</span>
-    </div>
-    <div class="item">
-      <input id="url" name="url" placeholder="URL" type="url" autocomplete="url" required />
-      <input class="toggle toggle-url" type="checkbox">
-      <span class="save">Save</span>
-    </div>
-    <div class="item">
-      <input id="service" name="service" placeholder="Service" />
-      <input class="toggle toggle-service" type="checkbox">
-      <span class="save">Save</span>
-    </div>
-  </form>
-
-  <div id="api">
-    <div class="item" id="save">
-      <button class="title">Save</button>
-      <input class="name" placeholder="Name" />
-      <textarea class="contents" placeholder="File contents"></textarea>
-    </div>
-    <div class="item" id="get">
-      <button class="title">Get</button>
-      <input class="name" placeholder="Name" />
-      <textarea class="contents"></textarea>
-    </div>
-    <div class="item" id="delete">
-      <button class="title">Delete</button>
-      <input class="name" placeholder="Name" />
-    </div>
-    <div class="item" id="index">
-      <button class="title">Index</button>
-      <textarea class="contents"></textarea>
-    </div>
-  </div>
 </body>
 
 </html>

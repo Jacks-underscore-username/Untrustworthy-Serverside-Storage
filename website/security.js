@@ -12,13 +12,32 @@ const ERRORS = {
 const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
 
 /**
+ * @typedef {Object} Index_file
+ * @prop {'file'} type
+ * @prop {string} hash
+ * @typedef {Object} Index
+ * @prop {'folder'} type
+ * @prop {{[key: string]: (Index_file | Index)}} contents
+ */
+
+/**
+ * @typedef {Object} VFS
+ * @prop {(fileName: string) => Promise<any>} getFile
+ * @prop {(fileName: string, data: any) => Promise<void>} saveFile
+ * @prop {(fileName: string) => Promise<void>} deleteFile
+ * @prop {() => Promise<Index>} getIndex
+ */
+
+/**
  * @param {URL} address
  * @param {string} username
  * @param {string} password
  * @param {string} [service]
- * @returns {Promise<{getFile:(fileName:string)=>Promise<any>,saveFile:(fileName:string,data:any)=>Promise<void>,deleteFile:(filePath:string)=>Promise<void>,getIndex:()=>Promise<Index>}>}
+ * @returns {Promise<VFS>}
  */
 export const connectToServer = async (address, username, password, service = '') => {
+  if (address.origin === 'null') address = new URL(`http://${address.toString()}`)
+
   const keyPair = await makeKeyPair()
   const clientPublicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
 
@@ -118,16 +137,13 @@ export const connectToServer = async (address, username, password, service = '')
   /** @type {string} */
   const seed = await messageServer({ command: 'get_seed', username })
 
-  const token = [seed, service, address, username, password].join('')
+  const token = [seed, service, username, password].join('')
 
   await messageServer({
     command: 'prove_seed',
     hashedSeed: arrayBufferToBase64(
       new Uint8Array(
-        await crypto.subtle.digest(
-          'SHA-512',
-          new TextEncoder().encode([seed, service, address, password, username].join(''))
-        )
+        await crypto.subtle.digest('SHA-512', new TextEncoder().encode([seed, service, password, username].join('')))
       )
     )
   })
@@ -239,12 +255,6 @@ export const connectToServer = async (address, username, password, service = '')
     })
 
   /**
-   * @typedef {Object} Index_file
-   * @prop {'file'} type
-   * @prop {string} hash
-   * @typedef {Object} Index
-   * @prop {'folder'} type
-   * @prop {{[key: string]: (Index_file | Index)}} contents
    * @returns {Promise<Index>}
    */
   const getIndex = async () => {

@@ -110,27 +110,3 @@ input[type="checkbox"]:checked::before {
   font-weight: bold;
   color: #fff;
 }
-
-#api {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 50px;
-  display: none;
-}
-
-#api.ready {
-  display: inherit;
-}
-
-#api > .item {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  background: #666;
-  padding: 10px;
-  border: 2px solid #999;
-  border-radius: 25px;
-}
