@@ -1,112 +1,43 @@
-* {
-  box-sizing: border-box;
-}
-
-html {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  padding: 0;
-  margin: 0;
-}
-
-body {
-  padding: 0;
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #151515;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 50px;
-}
-
 .title {
-  font-size: larger;
-  color: #0f0;
-  background-color: #333;
-  padding: 10px;
-  border: 2px solid #999;
-  border-radius: 25px;
-}
-
-button.title:hover {
-  transform: scale(1.1);
+  color: var(--highlight-2);
+  background-color: var(--middle-color);
+  padding: var(--size);
 }
 
 button.title.invalid {
-  color: #f00;
+  color: var(--error-2);
 }
 
 input,
 textarea {
-  color: #0f0;
-  background: #151515;
+  color: var(--highlight-2);
+  background: var(--background-color);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #fff;
+  color: var(--text-color);
   font-style: italic;
-}
-
-textarea {
-  min-height: 250px;
-}
-
-input[type="checkbox"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background-color: #151515;
-  margin: 0;
-
-  font: inherit;
-  width: 1.15em;
-  height: 1.15em;
-  border: 2px solid #999;
-  border-radius: 0.15em;
-  transform: translateY(-0.075em);
-
-  display: grid;
-  place-content: center;
-}
-
-input[type="checkbox"]::before {
-  content: "";
-  width: 0.65em;
-  height: 0.65em;
-  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-  transform: scale(0);
-  transform-origin: bottom left;
-  background-color: #0f0;
-}
-
-input[type="checkbox"]:checked::before {
-  transform: scale(1);
 }
 
 #connect {
   display: flex;
   flex-direction: column;
-  padding: 10px;
-  gap: 10px;
-  background-color: #666;
+  padding: calc(var(--size) * 2);
+  gap: var(--size);
+  background-color: var(--foreground-color);
   justify-content: center;
   align-items: center;
-  border: 2px solid #999;
-  border-radius: 15px;
 }
 
 #connect > .item {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: var(--size);
 }
 
 #connect > .item > span {
   font-weight: bold;
-  color: #fff;
+  color: var(--text-color);
 }

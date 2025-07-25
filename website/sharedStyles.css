@@ -1,0 +1,192 @@
+:root {
+  --background-color: #151515;
+  --middle-color: #333;
+  --foreground-color: #666;
+  --border-color: #999;
+  --highlight-hue: 120;
+  --highlight-1: hsl(var(--highlight-hue), 100%, 25%);
+  --highlight-2: hsl(var(--highlight-hue), 100%, 50%);
+  --highlight-3: hsl(var(--highlight-hue), 100%, 75%);
+  --error-hue: 0;
+  --error-1: hsl(var(--error-hue), 100%, 25%);
+  --error-2: hsl(var(--error-hue), 100%, 50%);
+  --error-3: hsl(var(--error-hue), 100%, 75%);
+  --text-color: #fff;
+
+  --move-timing: cubic-bezier(0.65, 0.05, 0.36, 1);
+  --color-timing: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --move-time: 0.15s;
+  --color-time: 0.25s;
+
+  --do-timing: 1;
+  --do-color-timing: calc(1 * var(--do-timing));
+  --do-move-timing: calc(1 * var(--do-timing));
+  --do-rounding: 1;
+
+  --border-size: 0.25;
+  --rounding-size: 5;
+  --text-size: 2;
+  --svg-size: 3;
+}
+
+* {
+  box-sizing: border-box;
+  font-size: calc(var(--size) * var(--text-size));
+}
+
+svg {
+  width: calc(var(--size) * var(--svg-size));
+  height: calc(var(--size) * var(--svg-size));
+}
+
+.bordered,
+.rounded {
+  border: calc(var(--size) * var(--border-size)) solid;
+  border-color: var(--border-color);
+}
+
+.rounded {
+  border-radius: calc(var(--do-rounding) * var(--size) * var(--rounding-size));
+}
+
+.s-xxs,
+.s-xxs * {
+  --size: 3px;
+}
+
+.s-xs,
+.s-xs * {
+  --size: 5px;
+}
+
+.s-s,
+.s-s * {
+  --size: 7px;
+}
+
+*,
+.s-m,
+.s-m * {
+  --size: 9px;
+}
+
+.s-l,
+.s-l * {
+  --size: 12px;
+}
+
+.s-xl,
+.s-xl * {
+  --size: 15px;
+}
+
+.s-xxl,
+.s-xxl * {
+  --size: 25px;
+}
+
+html,
+body {
+  width: unset;
+  height: unset;
+  min-width: 100vh;
+  min-height: 100vh;
+  padding: 0;
+  margin: 0;
+  background-color: var(--background-color);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#nav_bar {
+  display: flex;
+  min-width: 100%;
+  justify-content: space-around;
+  align-items: center;
+  background-color: var(--foreground-color);
+  padding: var(--size);
+  border-bottom: calc(var(--size) * var(--border-size)) solid
+    var(--border-color);
+}
+
+#nav_bar .item svg {
+  fill: var(--highlight-2);
+  margin-left: calc(var(--size) * 0.5);
+}
+
+.button {
+  border: calc(var(--size) * var(--border-size)) solid;
+  background: var(--middle-color);
+  border-radius: calc(var(--size) * var(--rounding-size) * var(--do-rounding));
+  padding: var(--size);
+  font-weight: bold;
+  color: var(--highlight-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--border-color);
+
+  transform: scale(1);
+
+  transition: border-color calc(var(--color-time) * var(--do-color-timing))
+    var(--color-timing), transform
+    calc(var(--move-time) * var(--do-move-timing)) var(--move-timing);
+}
+
+.button:hover {
+  border-color: var(--highlight-2);
+  transform: scale(1.1);
+}
+
+#page {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--background-color);
+  margin: 0;
+
+  font: inherit;
+  width: calc(var(--size) * 2.25);
+  height: calc(var(--size) * 2.25);
+  transform: translateY(-0.075em);
+
+  display: grid;
+  place-content: center;
+}
+
+input[type="checkbox"]::before {
+  content: "";
+  width: calc(var(--size) * 1.25);
+  height: calc(var(--size) * 1.25);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  filter: blur(calc(var(--size) * 2));
+  background-color: var(--highlight-2);
+  transition: filter calc(var(--do-move-timing) * var(--move-time))
+    var(--move-timing);
+}
+
+input[type="checkbox"]:checked::before {
+  filter: blur(0);
+}
+
+input,
+textarea {
+  color: #0f0;
+  background: #151515;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #fff;
+  font-style: italic;
+}

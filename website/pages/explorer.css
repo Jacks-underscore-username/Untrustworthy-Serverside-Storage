@@ -1,0 +1,36 @@
+#editor {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: var(--foreground-color);
+  padding: calc(var(--size) * 2);
+  gap: var(--size);
+}
+
+#editor span {
+  color: var(--highlight-2);
+  font-weight: bold;
+  font-style: italic;
+}
+
+#editor textarea {
+  min-width: calc(var(--size) * 25);
+  min-height: calc(var(--size) * 50);
+}
+
+.folder_wrapper {
+  padding: var(--size);
+  background: var(--middle-color);
+  margin-left: var(--size);
+}
+
+.folder_wrapper .title {
+  color: var(--text-color);
+  background-color: var(--foreground-color);
+}
+
+.file {
+  margin-left: var(--size);
+  color: var(--highlight-2);
+}

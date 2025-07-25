@@ -26,6 +26,7 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
  * @prop {(fileName: string, data: any) => Promise<void>} saveFile
  * @prop {(fileName: string) => Promise<void>} deleteFile
  * @prop {() => Promise<Index>} getIndex
+ * @prop {(...args: string[]) => string} joinPaths
  */
 
 /**
@@ -377,7 +378,52 @@ export const connectToServer = async (address, username, password, service = '')
     await baseSaveFile('index.json', index)
   }
 
-  return { getFile, saveFile, deleteFile, getIndex }
+  /** @type {{func: function, args: any[], resolve: any}[]} */
+  const queue = []
+
+  /**
+   * @template T
+   * @param {T extends function ? T : never} func
+   * @returns {T extends function ? T : never}
+   */
+  const wrapInQueue =
+    func =>
+    // @ts-expect-error
+    (...args) => {
+      let resolve
+      const promise = new Promise(subResolve => (resolve = subResolve))
+      queue.push({ func, args, resolve })
+      if (queue.length === 1) tickQueue()
+      return promise
+    }
+
+  const tickQueue = async () => {
+    const entry = queue[0]
+    const result = await entry.func(...entry.args)
+    entry.resolve(result)
+    queue.shift()
+    if (queue.length) tickQueue()
+  }
+
+  return {
+    getFile: wrapInQueue(getFile),
+    saveFile: wrapInQueue(saveFile),
+    deleteFile: wrapInQueue(deleteFile),
+    getIndex: wrapInQueue(getIndex),
+    joinPaths
+  }
+}
+
+/**
+ * @param  {...string} args
+ * @returns {string}
+ */
+const joinPaths = (...args) => {
+  let result = ''
+  for (const arg of args)
+    if (result.length) result += `/${arg}`
+    else result = arg
+  return result
 }
 
 /**

@@ -1,11 +1,10 @@
 /** @type {import("../pageManager").Page} */
 export default {
   name: 'login',
-  title: 'Login',
-  /**
-   * @param {import('../pageManager.js').PageApi} pageApi
-   */
+  icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"><path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/></svg>',
   load: pageApi => {
+    pageApi.shared.createNavBar(pageApi.allPages)
+
     const usernameElement = /** @type {HTMLInputElement} */ (document.getElementById('username'))
     const passwordElement = /** @type {HTMLInputElement} */ (document.getElementById('password'))
     const urlElement = /** @type {HTMLInputElement} */ (document.getElementById('url'))
@@ -29,9 +28,7 @@ export default {
       })
     }
 
-    connectForm.addEventListener('submit', event => {
-      event.preventDefault()
-      connectForm.remove()
+    const clickFunc = () => {
       pageApi.rawUss
         .connectToServer(
           new URL(urlElement.value.trim()),
@@ -40,9 +37,18 @@ export default {
           serviceElement.value.trim()
         )
         .then(result => {
+          connectForm.remove()
           pageApi.setVfs(result)
-          pageApi.goto('demo')
         })
+    }
+    connectForm.addEventListener('submit', event => {
+      event.preventDefault()
+      clickFunc()
     })
+
+    if (pageApi.TEST_FLAGS.AUTO_LOGIN) {
+      pageApi.TEST_FLAGS.AUTO_LOGIN = false
+      clickFunc()
+    }
   }
 }

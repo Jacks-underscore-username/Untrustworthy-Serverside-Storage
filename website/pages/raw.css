@@ -1,0 +1,15 @@
+textarea {
+  min-width: calc(var(--size) * 35);
+  min-height: calc(var(--size) * 50);
+}
+
+#page .item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--size);
+  background: var(--foreground-color);
+  margin: var(--size);
+  padding: calc(var(--size) * 2);
+}
