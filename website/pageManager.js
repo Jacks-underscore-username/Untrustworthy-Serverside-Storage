@@ -1,50 +1,40 @@
-/**
- * @typedef {Object} PageApi
- * @prop {(name: string) => void} goto
- * @prop {import('./security.js')} rawUss
- * @prop {import('./security.js').VFS} vfs
- * @prop {(vfs: import('./security.js').VFS) => void} setVfs
- * @prop {Page[]} allPages
- * @prop {import('./shared.js')} shared
- * @prop {Object<string, boolean>} TEST_FLAGS
- */
-
-/**
- * @typedef {Object} Page
- * @prop {string} name
- * @prop {(api: PageApi) => void} load
- * @prop {() => void} [stop]
- * @prop {string} [icon]
- */
-
+import editorPage from './pages/editor.js'
+import explorerPage from './pages/explorer.js'
 import homePage from './pages/home.js'
 import loginPage from './pages/login.js'
 import rawPage from './pages/raw.js'
-import explorerPage from './pages/explorer.js'
+import graphPage from './pages/graph.js'
+
+import plaintextNode from './nodes/plaintext.js'
+import topicNode from './nodes/topic.js'
 
 import * as uss from './security.js'
 
 import * as shared from './shared.js'
+import markup from './markup.js'
 
 /** @type {Object<string, boolean>} */
 const TEST_FLAGS = {
   AUTO_LOGIN: true,
   KEEP_PAGE: true,
   SKIP_HISTORY: true,
-  DISABLE_TEST_FLAGS: true
+  DISABLE_TEST_FLAGS: false
 }
 if (TEST_FLAGS.DISABLE_TEST_FLAGS) for (const key of Object.keys(TEST_FLAGS)) TEST_FLAGS[key] = false
 
-/** @type {import('./security.js').VFS | undefined} */
+/** @type {import('./types.d.js').VFS | undefined} */
 let vfs = undefined
 
-/** @type {Page[]} */
-const pages = [homePage, loginPage, rawPage, explorerPage]
+/** @type {import('./types.d.js').Page[]} */
+const pages = [homePage, loginPage, rawPage, explorerPage, editorPage, graphPage]
 
 /** @type {Object<string, string>} */
 const pageContents = {}
 
-/** @type {Page | undefined} */
+/** @type {import('./types.d.js').Node_type<any>[]} */
+const nodeTypes = [plaintextNode, topicNode]
+
+/** @type {import('./types.d.js').Page | undefined} */
 let lastPage = undefined
 
 /**
@@ -67,7 +57,7 @@ for (const page of pages) pageContents[page.name] = loadTextFileSync(`./pages/${
 
 const pageWrapper = /** @type {HTMLDivElement}*/ (document.getElementById('page'))
 
-/** @type {PageApi} */
+/** @type {import('./types.d.js').PageApi} */
 const pageApi = {
   rawUss: uss,
   get vfs() {
@@ -90,6 +80,8 @@ const pageApi = {
   goto: pageName => loadPage(pages.find(page => page.name === pageName) ?? loginPage),
   allPages: pages,
   shared,
+  markup,
+  nodeTypes,
   TEST_FLAGS
 }
 
@@ -99,7 +91,7 @@ if (TEST_FLAGS.KEEP_PAGE && localStorage.getItem('last_page')) targetPage = loca
 else localStorage.removeItem('last_page')
 
 /**
- * @param {Page} page
+ * @param {import('./types.d.js').Page} page
  */
 const loadPage = page => {
   if (lastPage !== undefined && lastPage.stop !== undefined) lastPage.stop()

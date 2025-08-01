@@ -1,0 +1,5 @@
+I'm not quite sure what you mean by "decoupling from automated observation", I like being in control of the servers I use (when I need to use any) if that's what you mean.
+
+As for how I got into coding? I don't remember a time when I *wasn't* programming (so realistically my Tim is what "got me into programming"), but I just love how much you can create with it, how everything created is just information (in the sense that it can be copied freely), how it doesn't consume resources to do, and it's always just a really enjoyable puzzle (hence why I like making lots of abstract docs / diagrams), plus it really feels like an art at certain times.
+
+Why do I want to intern? First the obvious reason of I want a job programming, but I do also really like the entire P2P idea, it's quite nice not needing an external host to share stuff across the internet, it makes "offline" (aka local non internet connected networks) possible, and it makes servers not needed anymore, anyone can be a "server" for anyone to connect to (I just wish browsers were able to use the HyperDHT type stuff). 

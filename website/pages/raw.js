@@ -1,4 +1,4 @@
-/** @type {import("../pageManager").Page} */
+/** @type {import('../types.d.js').Page} */
 export default {
   name: 'raw',
   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"><path d="m480-400-80-80 80-80 80 80-80 80Zm-85-235L295-735l185-185 185 185-100 100-85-85-85 85ZM225-295 40-480l185-185 100 100-85 85 85 85-100 100Zm510 0L635-395l85-85-85-85 100-100 185 185-185 185ZM480-40 295-225l100-100 85 85 85-85 100 100L480-40Z"/></svg>',
@@ -39,7 +39,7 @@ export default {
         saveButton.classList.add('invalid')
         setTimeout(() => saveButton.classList.remove('invalid'), 1000)
       } else {
-        pageApi.vfs.saveFile(saveName.value.trim(), saveContents.value)
+        pageApi.vfs.saveFile(saveName.value.trim(), JSON.stringify(saveContents.value))
         saveName.value = ''
         saveContents.value = ''
         clearOthers('save')
@@ -51,7 +51,7 @@ export default {
         getButton.classList.add('invalid')
         setTimeout(() => getButton.classList.remove('invalid'), 1000)
       } else {
-        pageApi.vfs.getFile(getName.value.trim()).then(file => (getContents.value = file))
+        pageApi.vfs.getFile(getName.value.trim()).then(file => (getContents.value = JSON.stringify(file, undefined, 2)))
         getName.value = ''
         clearOthers('get')
       }

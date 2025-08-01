@@ -88,12 +88,11 @@ svg {
 
 html,
 body {
-  width: unset;
-  height: unset;
-  min-width: 100vh;
-  min-height: 100vh;
-  padding: 0;
+  height: 100%;
+  width: 100%;
   margin: 0;
+  padding: 0;
+  overflow: hidden;
   background-color: var(--background-color);
 }
 
@@ -143,10 +142,16 @@ body {
 }
 
 #page {
-  flex: 1;
+  width: 100%;
+  flex-grow: 1;
+  min-height: 0;
+
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: var(--size);
+  position: relative;
+  overflow: hidden;
 }
 
 input[type="checkbox"] {

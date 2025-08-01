@@ -1,0 +1,20 @@
+#page {
+  flex-direction: column;
+  justify-content: start;
+}
+
+#controls_bar {
+  margin-top: var(--size);
+  position: absolute;
+  display: flex;
+  gap: var(--size);
+  padding: var(--size);
+}
+
+#graph_canvas {
+  width: 100%;
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+}

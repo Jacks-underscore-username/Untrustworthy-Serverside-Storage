@@ -1,7 +1,7 @@
 import pageApi from './pageManager.js'
 
 /**
- * @param {import("./pageManager").Page[]} allPages
+ * @param {import('./types.d.js').Page[]} allPages
  */
 export const createNavBar = allPages => {
   const oldWrapper = document.getElementById('nav_bar')

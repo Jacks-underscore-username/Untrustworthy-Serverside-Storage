@@ -1,5 +1,5 @@
 /**
- * @type {import("../pageManager").Page}
+ * @type {import('../types.d.js').Page}
  */
 export default {
   name: 'explorer',
@@ -20,9 +20,7 @@ export default {
         const currentName = splitPath.pop()
         if (editorNameElement.value.trim() !== currentName) {
           const newPath = vfs.joinPaths(...splitPath, editorNameElement.value.trim())
-          console.log(`Changing ${currentFilePath} to ${newPath}`)
-          console.log(editorContentElement.value)
-          pageApi.vfs.saveFile(newPath, editorContentElement.value)
+          pageApi.vfs.saveFile(newPath, JSON.parse(editorContentElement.value))
           pageApi.vfs.deleteFile(currentFilePath)
           currentFilePath = newPath
           generate()
@@ -42,7 +40,7 @@ export default {
     /**
      * @param {HTMLDivElement} parent
      * @param {string} name
-     * @param {import("../security").Index} index
+     * @param {import('../types.d.js').Index} index
      * @param {string} path
      */
     const generateFolder = (parent, name, index, path) => {
@@ -75,7 +73,7 @@ export default {
       element.addEventListener('click', async () => {
         const data = await pageApi.vfs.getFile(vfs.joinPaths(path, name))
         editorNameElement.value = name
-        editorContentElement.value = data
+        editorContentElement.value = JSON.stringify(data, undefined, 2)
         currentFilePath = vfs.joinPaths(path, name)
       })
       parent.appendChild(element)
