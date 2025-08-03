@@ -1,17 +1,13 @@
-const ERRORS = {
-  MISSING_FILE: 'Missing file',
-  MISSING_FOLDER: 'Missing folder',
-  FOLDER_IS_FILE: 'File exists where a folder should',
-  FILE_IS_FOLDER: 'Folder exists where a file should',
-  FILE_IS_LINK: 'Link links to link'
-}
-
 /**
- * @returns {Promise<CryptoKeyPair>}
- */
-const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
-
-/**
+ * @typedef {Object} VFS
+ * @prop {(fileName: string) => Promise<any>} getFile
+ * @prop {(fileName: string, data: any) => Promise<void>} saveFile
+ * @prop {(fileName: string) => Promise<void>} deleteFile
+ * @prop {() => Promise<Index>} getIndex
+ * @prop {(index: Index) => Promise<void>} saveIndex
+ * @prop {(fileName: string) => Promise<boolean>} doesFileExist
+ * @prop {(...args: string[]) => string} joinPaths
+ * @prop {(data: string) => Promise<string>} quickHash
  * @typedef {Object} Index_file
  * @prop {'file'} type
  * @prop {string} hash
@@ -20,14 +16,17 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
  * @prop {{[key: string]: (Index_file | Index)}} contents
  */
 
+const ERRORS = {
+  MISSING_FILE: 'Missing file',
+  MISSING_FOLDER: 'Missing folder',
+  FOLDER_IS_FILE: 'File exists where a folder should',
+  FILE_IS_FOLDER: 'Folder exists where a file should'
+}
+
 /**
- * @typedef {Object} VFS
- * @prop {(fileName: string) => Promise<any>} getFile
- * @prop {(fileName: string, data: any) => Promise<void>} saveFile
- * @prop {(fileName: string) => Promise<void>} deleteFile
- * @prop {() => Promise<Index>} getIndex
- * @prop {(...args: string[]) => string} joinPaths
+ * @returns {Promise<CryptoKeyPair>}
  */
+const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
 
 /**
  * @param {URL} address
@@ -248,12 +247,27 @@ export const connectToServer = async (address, username, password, service = '')
    * @param {any} data
    * @returns {Promise<void>}
    */
-  const baseSaveFile = async (filePath, data) =>
+  const baseSaveFile = async (filePath, data) => {
     await messageServer({
       command: 'save_file',
       file_name: await hashFilePath(filePath),
       data: await encryptData(JSON.stringify(data))
     })
+  }
+
+  /**
+   * @param {string} filePath
+   * @returns {Promise<void>}
+   */
+  const baseDeleteFile = async filePath => {
+    await messageServer({
+      command: 'delete_file',
+      file_name: await hashFilePath(filePath)
+    })
+  }
+
+  /** @type {string} */
+  let lastIndexHash = ''
 
   /**
    * @returns {Promise<Index>}
@@ -267,25 +281,38 @@ export const connectToServer = async (address, username, password, service = '')
     try {
       index = await baseGetFile('index.json')
     } catch (err) {
-      await baseSaveFile('index.json', index)
+      await saveIndex(index)
     }
+    lastIndexHash = await quickHash(JSON.stringify(index))
     return index
+  }
+
+  /**
+   * @param {Index} index
+   * @returns {Promise<void>}
+   */
+  const saveIndex = async index => {
+    const hash = await quickHash(JSON.stringify(index))
+    if (hash === lastIndexHash) return
+    await baseSaveFile('index.json', index)
   }
 
   /**
    * @param {Index} index
    * @param {string} fileHash
    * @param {string} [folderPath]
+   * @param {string[]} [excludePaths]
    * @returns {{ folder: Index, file: Index_file, filePath: string } | undefined}
    */
-  const findFileByHash = (index, fileHash, folderPath) => {
+  const findFileByHash = (index, fileHash, folderPath, excludePaths = []) => {
     for (const [name, entry] of Object.entries(index.contents)) {
       const entryPath = folderPath === undefined ? name : `${folderPath}/${name}`
       if (entry.type === 'folder') {
         const result = findFileByHash(entry, fileHash, entryPath)
         if (result !== undefined) return result
       }
-      if (entry.type === 'file' && entry.hash === fileHash) return { folder: index, file: entry, filePath: entryPath }
+      if (entry.type === 'file' && entry.hash === fileHash && !excludePaths.includes(entryPath))
+        return { folder: index, file: entry, filePath: entryPath }
     }
     return
   }
@@ -294,15 +321,17 @@ export const connectToServer = async (address, username, password, service = '')
    * @param {Index} index
    * @param {string} folderPath
    * @param {boolean} [makeFolders]
-   * @returns {Index}
+   * @param {boolean} [softFail]
+   * @returns {Index | undefined}
    */
-  const getIndexFolder = (index, folderPath, makeFolders = false) => {
+  const getIndexFolder = (index, folderPath, makeFolders = false, softFail = false) => {
     if (!folderPath.length) return index
     const splitPath = folderPath.split('/')
     let parentFolder = index
     for (let part = splitPath.shift() ?? ''; part.length; part = splitPath.shift() ?? '') {
       if (parentFolder.contents[part] === undefined)
         if (makeFolders) parentFolder.contents[part] = { type: 'folder', contents: {} }
+        else if (softFail) return
         else throw new Error(ERRORS.MISSING_FOLDER)
       const nextEntry = parentFolder.contents[part]
       if (nextEntry.type === 'folder') parentFolder = nextEntry
@@ -319,21 +348,31 @@ export const connectToServer = async (address, username, password, service = '')
   const saveFile = async (filePath, data) => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
-    const fileHash = arrayBufferToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(data)))
+
+    const fileHash = await quickHash(JSON.stringify(data))
     const findResult = findFileByHash(index, fileHash)
 
     const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'), true)
     if (parentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
     if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
 
-    if (findResult === undefined) await baseSaveFile(fileHash, data)
+    let oldHash = undefined
 
+    const oldEntry = parentFolder.contents[splitPath[0]]
+    if (oldEntry !== undefined) {
+      if (oldEntry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
+      oldHash = oldEntry.hash
+    }
+
+    if (findResult === undefined && oldHash !== fileHash) await baseSaveFile(fileHash, data)
     parentFolder.contents[splitPath[0]] = {
       type: 'file',
       hash: fileHash
     }
 
-    await baseSaveFile('index.json', index)
+    if (oldHash !== undefined && oldHash !== fileHash) await baseDeleteFile(oldHash)
+
+    await saveIndex(index)
   }
 
   /**
@@ -344,7 +383,7 @@ export const connectToServer = async (address, username, password, service = '')
     const index = await getIndex()
     const splitPath = filePath.split('/')
     const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
-    if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    if (parentFolder === undefined || parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
     const entry = parentFolder.contents[splitPath[0]]
     if (entry === undefined) throw new Error(ERRORS.MISSING_FILE)
     if (entry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
@@ -359,23 +398,36 @@ export const connectToServer = async (address, username, password, service = '')
     const index = await getIndex()
     const splitPath = filePath.split('/')
     const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
-    if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    if (parentFolder === undefined || parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
     const entry = parentFolder.contents[splitPath[0]]
     if (entry === undefined) throw new Error(ERRORS.MISSING_FILE)
     if (entry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
     delete parentFolder.contents[splitPath[0]]
     const findResult = findFileByHash(index, entry.hash)
-    if (findResult === undefined)
-      await messageServer({
-        command: 'delete_file',
-        file_name: await hashFilePath(entry.hash)
-      })
+    if (findResult === undefined) await baseDeleteFile(entry.hash)
     for (let subPath = filePath.split('/').slice(0, filePath.split('/').length - 1); subPath.length; subPath.pop()) {
       const subParentFolder = getIndexFolder(index, subPath.join('/'))
+      if (subParentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
       if (Object.keys(subParentFolder.contents).length) break
-      delete getIndexFolder(index, subPath.slice(0, subPath.length - 1).join('/')).contents[subPath[subPath.length - 1]]
+      const subSubParentFolder = getIndexFolder(index, subPath.slice(0, subPath.length - 1).join('/'))
+      if (subSubParentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
+      delete subSubParentFolder.contents[subPath[subPath.length - 1]]
     }
-    await baseSaveFile('index.json', index)
+    await saveIndex(index)
+  }
+
+  /**
+   * @param {string} filePath
+   * @returns {Promise<boolean>}
+   */
+  const doesFileExist = async filePath => {
+    const index = await getIndex()
+    const splitPath = filePath.split('/')
+    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
+    if (parentFolder === undefined || parentFolder.type !== 'folder') return false
+    const entry = parentFolder.contents[splitPath[0]]
+    if (entry === undefined) return false
+    return true
   }
 
   /** @type {{func: function, args: any[], resolve: any}[]} */
@@ -410,7 +462,10 @@ export const connectToServer = async (address, username, password, service = '')
     saveFile: wrapInQueue(saveFile),
     deleteFile: wrapInQueue(deleteFile),
     getIndex: wrapInQueue(getIndex),
-    joinPaths
+    saveIndex: wrapInQueue(saveIndex),
+    doesFileExist: wrapInQueue(doesFileExist),
+    joinPaths,
+    quickHash
   }
 }
 
@@ -425,6 +480,12 @@ const joinPaths = (...args) => {
     else result = arg
   return result
 }
+
+/**
+ * @param {string} data
+ * @returns {Promise<string>}
+ */
+const quickHash = async data => arrayBufferToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(data)))
 
 /**
  * @param {string} base64
