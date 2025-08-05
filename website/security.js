@@ -1,27 +1,29 @@
-/**
- * @typedef {Object} VFS
- * @prop {(fileName: string) => Promise<any>} getFile
- * @prop {(fileName: string, data: any) => Promise<void>} saveFile
- * @prop {(fileName: string) => Promise<void>} deleteFile
- * @prop {() => Promise<Index>} getIndex
- * @prop {(index: Index) => Promise<void>} saveIndex
- * @prop {(fileName: string) => Promise<boolean>} doesFileExist
- * @prop {(...args: string[]) => string} joinPaths
- * @prop {(data: string) => Promise<string>} quickHash
- * @typedef {Object} Index_file
- * @prop {'file'} type
- * @prop {string} hash
- * @typedef {Object} Index
- * @prop {'folder'} type
- * @prop {{[key: string]: (Index_file | Index)}} contents
- */
-
 const ERRORS = {
-  MISSING_FILE: 'Missing file',
-  MISSING_FOLDER: 'Missing folder',
-  FOLDER_IS_FILE: 'File exists where a folder should',
-  FILE_IS_FOLDER: 'Folder exists where a file should'
+  MISSING_FILE: 'Missing file "$P"',
+  MISSING_FOLDER: 'Missing folder "$P"',
+  FOLDER_IS_FILE: 'File exists where a folder should at "$P"',
+  FILE_IS_FOLDER: 'Folder exists where a file should at "$P"'
 }
+
+/**
+ * 0 - none
+ * 1 - real file changes
+ * 2 - vfs operations
+ * 3 - all messaging
+ * 4 - encrypted data + everything else
+ */
+const LOGGING_LEVEL = 0
+
+/** Assumes no files will change on the server unless told to by this client */
+const ASSUME_SINGLE_CLIENT = true
+
+/**
+ * @param {string} error
+ * @param  {...string} parts
+ * @returns {string}
+ */
+const fillError = (error, ...parts) =>
+  error.split('$P').reduce((prev, part, index) => (index ? `${prev}${parts.shift()}${part}` : part), '')
 
 /**
  * @returns {Promise<CryptoKeyPair>}
@@ -33,12 +35,14 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
  * @param {string} username
  * @param {string} password
  * @param {string} [service]
- * @returns {Promise<VFS>}
+ * @returns {Promise<import("./types.d.js").VFS>}
  */
 export const connectToServer = async (address, username, password, service = '') => {
   if (address.origin === 'null') address = new URL(`http://${address.toString()}`)
+  if (LOGGING_LEVEL >= 1) console.log(`Connecting to server at ${address.toString()}`)
 
   const keyPair = await makeKeyPair()
+  if (LOGGING_LEVEL >= 1) console.log('Generated keypair')
   const clientPublicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
 
   const { public_key: serverPublicKeyJwk, id } = await (
@@ -50,6 +54,7 @@ export const connectToServer = async (address, username, password, service = '')
       })
     })
   ).json()
+  if (LOGGING_LEVEL >= 1) console.log('Received raw server public key')
 
   const serverPublicKey = await crypto.subtle.importKey(
     'jwk',
@@ -58,8 +63,10 @@ export const connectToServer = async (address, username, password, service = '')
     false,
     []
   )
+  if (LOGGING_LEVEL >= 1) console.log('Imported server public key')
 
   const secret = await crypto.subtle.deriveBits({ name: 'ECDH', public: serverPublicKey }, keyPair.privateKey, 256)
+  if (LOGGING_LEVEL >= 1) console.log('Derived shared secret')
 
   const derivedKeyBytes = new Uint8Array(
     await crypto.subtle.deriveBits(
@@ -73,17 +80,20 @@ export const connectToServer = async (address, username, password, service = '')
       512
     )
   )
+  if (LOGGING_LEVEL >= 1) console.log('Derived shared key seeds')
 
   const sharedKeys = {
     encode: await importKey(derivedKeyBytes.slice(0, 32), ['encrypt']),
     decode: await importKey(derivedKeyBytes.slice(32, 64), ['decrypt'])
   }
+  if (LOGGING_LEVEL >= 1) console.log('Derived shared keypair')
 
   /**
    * @param {any} message
    * @returns {Promise<any>}
    */
   const messageServer = async message => {
+    if (LOGGING_LEVEL >= 4) console.log(`Messaging server: ${JSON.stringify(message)}`)
     const ivOut = crypto.getRandomValues(new Uint8Array(12))
     const dataOut = new TextEncoder().encode(JSON.stringify(message))
 
@@ -132,12 +142,15 @@ export const connectToServer = async (address, username, password, service = '')
         )
       )
     )
+    if (LOGGING_LEVEL >= 4) console.log(`Got message back from server: ${JSON.stringify(decrypted)}`)
     return decrypted
   }
   /** @type {string} */
   const seed = await messageServer({ command: 'get_seed', username })
+  if (LOGGING_LEVEL >= 1) console.log(`Got seed from server: ${seed}`)
 
   const token = [seed, service, username, password].join('')
+  if (LOGGING_LEVEL >= 1) console.log(`Generated secret token from server seed: ${token}`)
 
   await messageServer({
     command: 'prove_seed',
@@ -147,6 +160,7 @@ export const connectToServer = async (address, username, password, service = '')
       )
     )
   })
+  if (LOGGING_LEVEL >= 1) console.log('Authenticated with server')
 
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -157,6 +171,7 @@ export const connectToServer = async (address, username, password, service = '')
     false,
     ['deriveBits', 'deriveKey']
   )
+  if (LOGGING_LEVEL >= 1) console.log('Derived secret key material')
 
   /**
    * @param {any} data
@@ -182,11 +197,13 @@ export const connectToServer = async (address, username, password, service = '')
       key,
       new TextEncoder().encode(JSON.stringify(data))
     )
-    return JSON.stringify({
+    const result = JSON.stringify({
       iv: arrayBufferToBase64(iv),
       salt: arrayBufferToBase64(salt),
       encryptedData: arrayBufferToBase64(encryptedData)
     })
+    if (LOGGING_LEVEL >= 4) console.log(`Encrypted data: ${JSON.stringify(data)} -> ${result}`)
+    return result
   }
 
   /**
@@ -217,6 +234,7 @@ export const connectToServer = async (address, username, password, service = '')
         )
       )
     )
+    if (LOGGING_LEVEL >= 4) console.log(`Decrypted data: ${encryptedData} -> ${JSON.stringify(data)}`)
     return data
   }
 
@@ -234,12 +252,14 @@ export const connectToServer = async (address, username, password, service = '')
    * @returns {Promise<any>}
    */
   const baseGetFile = async filePath => {
+    const hashedPath = await hashFilePath(filePath)
+    if (LOGGING_LEVEL >= 1) console.log(`Getting file from server: ${filePath} -> ${hashedPath}`)
     const response = await messageServer({
       command: 'get_file',
-      file_name: await hashFilePath(filePath)
+      file_name: hashedPath
     })
     if (response.status === 'success') return JSON.parse(await decryptData(response.file))
-    throw new Error(ERRORS.MISSING_FILE)
+    throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
   }
 
   /**
@@ -248,9 +268,11 @@ export const connectToServer = async (address, username, password, service = '')
    * @returns {Promise<void>}
    */
   const baseSaveFile = async (filePath, data) => {
+    const hashedPath = await hashFilePath(filePath)
+    if (LOGGING_LEVEL >= 1) console.log(`Saving file to server: ${filePath} -> ${hashedPath}`)
     await messageServer({
       command: 'save_file',
-      file_name: await hashFilePath(filePath),
+      file_name: hashedPath,
       data: await encryptData(JSON.stringify(data))
     })
   }
@@ -260,20 +282,30 @@ export const connectToServer = async (address, username, password, service = '')
    * @returns {Promise<void>}
    */
   const baseDeleteFile = async filePath => {
+    const hashedPath = await hashFilePath(filePath)
+    if (LOGGING_LEVEL >= 1) console.log(`Deleting file: ${filePath} -> ${hashedPath}`)
     await messageServer({
       command: 'delete_file',
-      file_name: await hashFilePath(filePath)
+      file_name: hashedPath
     })
   }
 
   /** @type {string} */
   let lastIndexHash = ''
 
+  /** @type {import("./types.d.js").Index | undefined} */
+  let lastIndex = undefined
+
   /**
-   * @returns {Promise<Index>}
+   * @returns {Promise<import("./types.d.js").Index>}
    */
   const getIndex = async () => {
-    /** @type {Index} */
+    if (ASSUME_SINGLE_CLIENT && lastIndex !== undefined) {
+      if (LOGGING_LEVEL >= 3) console.log('Got cached VFS index')
+      return lastIndex
+    }
+    if (LOGGING_LEVEL >= 3) console.log('Getting VFS index')
+    /** @type {import("./types.d.js").Index} */
     let index = {
       type: 'folder',
       contents: {}
@@ -283,26 +315,31 @@ export const connectToServer = async (address, username, password, service = '')
     } catch (err) {
       await saveIndex(index)
     }
-    lastIndexHash = await quickHash(JSON.stringify(index))
     return index
   }
 
   /**
-   * @param {Index} index
+   * @param {import("./types.d.js").Index} index
    * @returns {Promise<void>}
    */
   const saveIndex = async index => {
+    if (ASSUME_SINGLE_CLIENT) lastIndex = index
     const hash = await quickHash(JSON.stringify(index))
-    if (hash === lastIndexHash) return
+    if (hash === lastIndexHash) {
+      if (LOGGING_LEVEL >= 4) console.log('Skipped saving VFS index')
+      return
+    }
+    lastIndexHash = await quickHash(JSON.stringify(index))
+    if (LOGGING_LEVEL >= 3) console.log('Saving VFS index')
     await baseSaveFile('index.json', index)
   }
 
   /**
-   * @param {Index} index
+   * @param {import("./types.d.js").Index} index
    * @param {string} fileHash
    * @param {string} [folderPath]
    * @param {string[]} [excludePaths]
-   * @returns {{ folder: Index, file: Index_file, filePath: string } | undefined}
+   * @returns {{ folder: import("./types.d.js").Index, file: import("./types.d.js").Index_file, filePath: string } | undefined}
    */
   const findFileByHash = (index, fileHash, folderPath, excludePaths = []) => {
     for (const [name, entry] of Object.entries(index.contents)) {
@@ -318,11 +355,11 @@ export const connectToServer = async (address, username, password, service = '')
   }
 
   /**
-   * @param {Index} index
+   * @param {import("./types.d.js").Index} index
    * @param {string} folderPath
    * @param {boolean} [makeFolders]
    * @param {boolean} [softFail]
-   * @returns {Index | undefined}
+   * @returns {import("./types.d.js").Index | undefined}
    */
   const getIndexFolder = (index, folderPath, makeFolders = false, softFail = false) => {
     if (!folderPath.length) return index
@@ -332,10 +369,10 @@ export const connectToServer = async (address, username, password, service = '')
       if (parentFolder.contents[part] === undefined)
         if (makeFolders) parentFolder.contents[part] = { type: 'folder', contents: {} }
         else if (softFail) return
-        else throw new Error(ERRORS.MISSING_FOLDER)
+        else throw new Error(fillError(ERRORS.MISSING_FOLDER, folderPath))
       const nextEntry = parentFolder.contents[part]
       if (nextEntry.type === 'folder') parentFolder = nextEntry
-      else throw new Error(ERRORS.FOLDER_IS_FILE)
+      else throw new Error(fillError(ERRORS.FOLDER_IS_FILE, folderPath))
     }
     return parentFolder
   }
@@ -352,27 +389,37 @@ export const connectToServer = async (address, username, password, service = '')
     const fileHash = await quickHash(JSON.stringify(data))
     const findResult = findFileByHash(index, fileHash)
 
-    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'), true)
-    if (parentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
-    if (parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
+
+    const parentFolder = getIndexFolder(index, parentFolderPath, true)
+    if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
+    if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
 
     let oldHash = undefined
 
     const oldEntry = parentFolder.contents[splitPath[0]]
     if (oldEntry !== undefined) {
-      if (oldEntry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
+      if (oldEntry.type === 'folder')
+        throw new Error(fillError(ERRORS.FILE_IS_FOLDER, joinPaths(parentFolderPath, splitPath[0])))
       oldHash = oldEntry.hash
     }
 
-    if (findResult === undefined && oldHash !== fileHash) await baseSaveFile(fileHash, data)
+    if (findResult === undefined && oldHash !== fileHash) {
+      if (LOGGING_LEVEL >= 1) console.log(`Saving file to server: ${fileHash}`)
+      await baseSaveFile(fileHash, data)
+    }
     parentFolder.contents[splitPath[0]] = {
       type: 'file',
       hash: fileHash
     }
-
-    if (oldHash !== undefined && oldHash !== fileHash) await baseDeleteFile(oldHash)
+    if (LOGGING_LEVEL >= 2) console.log(`Saved file to VFS: ${filePath}`)
 
     await saveIndex(index)
+
+    if (oldHash !== undefined && oldHash !== fileHash) {
+      if (LOGGING_LEVEL >= 1) console.log(`Deleting old version of file: ${filePath} ${oldHash}`)
+      await baseDeleteFile(oldHash)
+    }
   }
 
   /**
@@ -380,13 +427,16 @@ export const connectToServer = async (address, username, password, service = '')
    * @returns {Promise<any>}
    */
   const getFile = async filePath => {
+    if (LOGGING_LEVEL >= 1) console.log(`Getting file with VFS: ${filePath}`)
     const index = await getIndex()
     const splitPath = filePath.split('/')
-    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
-    if (parentFolder === undefined || parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
+    const parentFolder = getIndexFolder(index, parentFolderPath)
+    if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
+    if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
     const entry = parentFolder.contents[splitPath[0]]
-    if (entry === undefined) throw new Error(ERRORS.MISSING_FILE)
-    if (entry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
+    if (entry === undefined) throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
+    if (entry.type === 'folder') throw new Error(fillError(ERRORS.FILE_IS_FOLDER, filePath))
     if (entry.type === 'file') return await baseGetFile(entry.hash)
   }
 
@@ -397,20 +447,27 @@ export const connectToServer = async (address, username, password, service = '')
   const deleteFile = async filePath => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
-    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
-    if (parentFolder === undefined || parentFolder.type !== 'folder') throw new Error(ERRORS.FOLDER_IS_FILE)
+    const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
+    const parentFolder = getIndexFolder(index, parentFolderPath)
+    if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
+    if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
     const entry = parentFolder.contents[splitPath[0]]
-    if (entry === undefined) throw new Error(ERRORS.MISSING_FILE)
-    if (entry.type === 'folder') throw new Error(ERRORS.FILE_IS_FOLDER)
+    if (entry === undefined) throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
+    if (entry.type === 'folder') throw new Error(fillError(ERRORS.FILE_IS_FOLDER, filePath))
     delete parentFolder.contents[splitPath[0]]
     const findResult = findFileByHash(index, entry.hash)
-    if (findResult === undefined) await baseDeleteFile(entry.hash)
+    if (findResult === undefined) {
+      if (LOGGING_LEVEL >= 1) console.log(`Deleting file from server: ${entry.hash}`)
+      await baseDeleteFile(entry.hash)
+    }
     for (let subPath = filePath.split('/').slice(0, filePath.split('/').length - 1); subPath.length; subPath.pop()) {
       const subParentFolder = getIndexFolder(index, subPath.join('/'))
-      if (subParentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
+      if (subParentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, subPath.join('/')))
       if (Object.keys(subParentFolder.contents).length) break
       const subSubParentFolder = getIndexFolder(index, subPath.slice(0, subPath.length - 1).join('/'))
-      if (subSubParentFolder === undefined) throw new Error(ERRORS.MISSING_FOLDER)
+      if (subSubParentFolder === undefined)
+        throw new Error(fillError(ERRORS.MISSING_FOLDER, subPath.slice(0, subPath.length - 1).join('/')))
+      if (LOGGING_LEVEL >= 2) console.log(`Deleting empty folder from VFS: ${subPath.join('/')}`)
       delete subSubParentFolder.contents[subPath[subPath.length - 1]]
     }
     await saveIndex(index)
@@ -423,11 +480,17 @@ export const connectToServer = async (address, username, password, service = '')
   const doesFileExist = async filePath => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
-    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'))
-    if (parentFolder === undefined || parentFolder.type !== 'folder') return false
-    const entry = parentFolder.contents[splitPath[0]]
-    if (entry === undefined) return false
-    return true
+    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'), undefined, true)
+    let result = undefined
+    if (parentFolder === undefined || parentFolder.type !== 'folder') result = false
+    if (result === undefined && parentFolder !== undefined) {
+      const entry = parentFolder.contents[splitPath[0]]
+      if (entry === undefined) return false
+      result = true
+    }
+    if (result === undefined) throw new Error('Uh oh')
+    if (LOGGING_LEVEL >= 2) console.log(`Checked for file at ${filePath} (it ${result ? 'exists' : 'does not exists'})`)
+    return result
   }
 
   /** @type {{func: function, args: any[], resolve: any}[]} */
