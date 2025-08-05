@@ -15,7 +15,7 @@ const ERRORS = {
 const LOGGING_LEVEL = 0
 
 /** Assumes no files will change on the server unless told to by this client */
-const ASSUME_SINGLE_CLIENT = true
+const ASSUME_SINGLE_CLIENT = false
 
 /**
  * @param {string} error
@@ -35,7 +35,7 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
  * @param {string} username
  * @param {string} password
  * @param {string} [service]
- * @returns {Promise<import("./types.d.js").VFS>}
+ * @returns {Promise<import("./types.d").VFS>}
  */
 export const connectToServer = async (address, username, password, service = '') => {
   if (address.origin === 'null') address = new URL(`http://${address.toString()}`)
@@ -293,11 +293,11 @@ export const connectToServer = async (address, username, password, service = '')
   /** @type {string} */
   let lastIndexHash = ''
 
-  /** @type {import("./types.d.js").Index | undefined} */
+  /** @type {import("./types.d").Index | undefined} */
   let lastIndex = undefined
 
   /**
-   * @returns {Promise<import("./types.d.js").Index>}
+   * @returns {Promise<import("./types.d").Index>}
    */
   const getIndex = async () => {
     if (ASSUME_SINGLE_CLIENT && lastIndex !== undefined) {
@@ -305,7 +305,7 @@ export const connectToServer = async (address, username, password, service = '')
       return lastIndex
     }
     if (LOGGING_LEVEL >= 3) console.log('Getting VFS index')
-    /** @type {import("./types.d.js").Index} */
+    /** @type {import("./types.d").Index} */
     let index = {
       type: 'folder',
       contents: {}
@@ -319,7 +319,7 @@ export const connectToServer = async (address, username, password, service = '')
   }
 
   /**
-   * @param {import("./types.d.js").Index} index
+   * @param {import("./types.d").Index} index
    * @returns {Promise<void>}
    */
   const saveIndex = async index => {
@@ -335,11 +335,11 @@ export const connectToServer = async (address, username, password, service = '')
   }
 
   /**
-   * @param {import("./types.d.js").Index} index
+   * @param {import("./types.d").Index} index
    * @param {string} fileHash
    * @param {string} [folderPath]
    * @param {string[]} [excludePaths]
-   * @returns {{ folder: import("./types.d.js").Index, file: import("./types.d.js").Index_file, filePath: string } | undefined}
+   * @returns {{ folder: import("./types.d").Index, file: import("./types.d").Index_file, filePath: string } | undefined}
    */
   const findFileByHash = (index, fileHash, folderPath, excludePaths = []) => {
     for (const [name, entry] of Object.entries(index.contents)) {
@@ -355,11 +355,11 @@ export const connectToServer = async (address, username, password, service = '')
   }
 
   /**
-   * @param {import("./types.d.js").Index} index
+   * @param {import("./types.d").Index} index
    * @param {string} folderPath
    * @param {boolean} [makeFolders]
    * @param {boolean} [softFail]
-   * @returns {import("./types.d.js").Index | undefined}
+   * @returns {import("./types.d").Index | undefined}
    */
   const getIndexFolder = (index, folderPath, makeFolders = false, softFail = false) => {
     if (!folderPath.length) return index

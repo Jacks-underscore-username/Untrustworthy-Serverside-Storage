@@ -69,15 +69,12 @@ const connections = []
  * @returns {Promise<Response>}
  */
 const handleRawMessage = async req => {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers })
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204 })
 
   try {
-    return new Response(JSON.stringify(await handleUnencryptedMessage(/** @type {Request} */ (await req.json()))), {
-      headers
-    })
+    return new Response(JSON.stringify(await handleUnencryptedMessage(/** @type {Request} */ (await req.json()))))
   } catch (err) {
+    console.error(err)
     return new Response('Unknown error')
   }
 }
@@ -235,7 +232,9 @@ const handleVerifiedRequest = async (request, connection, user) => {
 const server = Bun.serve({
   port: config.port,
   async fetch(req) {
-    return await handleRawMessage(req)
+    const response = await handleRawMessage(req)
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    return response
   }
 })
 
