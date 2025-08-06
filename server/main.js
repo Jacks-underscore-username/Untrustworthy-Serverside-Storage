@@ -37,8 +37,7 @@ const path = require('node:path')
  */
 
 /**
- * @typedef {Object} ServerConfig
- * @prop {number} port
+ * @typedef {{ port: number, useRelay: false | undefined } | { useRelay: true, relayAddress: string }} ServerConfig
  */
 
 const config = /** @type {ServerConfig} */ (JSON.parse(fs.readFileSync('./config.json', 'utf8')))
@@ -76,6 +75,19 @@ const handleRawMessage = async req => {
   } catch (err) {
     console.error(err)
     return new Response('Unknown error')
+  }
+}
+
+/**
+ * @param {string} message
+ * @returns {Promise<string>}
+ */
+const handleRawMessageFromSocket = async message => {
+  try {
+    return JSON.stringify(await handleUnencryptedMessage(JSON.parse(message)))
+  } catch (err) {
+    console.error(err)
+    return 'Unknown error'
   }
 }
 
@@ -228,14 +240,45 @@ const handleVerifiedRequest = async (request, connection, user) => {
     return { status: 'success' }
   }
 }
-
-const server = Bun.serve({
-  port: config.port,
-  async fetch(req) {
-    const response = await handleRawMessage(req)
-    response.headers.set('Access-Control-Allow-Origin', '*')
-    return response
+;(async () => {
+  if (config.useRelay) {
+    /** @type {WebSocket} */
+    let currentSocket = await new Promise(resolve => {
+      let hasResolved = false
+      /** @type {WebSocket | undefined} */
+      let lastSocket = undefined
+      const func = () => {
+        if (hasResolved && currentSocket.readyState === 1) return
+        if (lastSocket !== undefined && lastSocket.readyState === 1) {
+          console.log('Websocket connected')
+          lastSocket.onmessage = async event => {
+            const message = event.data
+            const response = await handleRawMessageFromSocket(message)
+            currentSocket.send(response)
+          }
+          if (hasResolved) currentSocket = lastSocket
+          else {
+            hasResolved = true
+            resolve(lastSocket)
+          }
+        } else {
+          console.log(`Connecting to websocket at ${config.relayAddress}`)
+          lastSocket = new WebSocket(config.relayAddress)
+        }
+      }
+      func()
+      setInterval(func, 1000)
+    })
+    console.log(`Connected to relay at ${config.relayAddress}`)
+  } else {
+    const server = Bun.serve({
+      port: config.port,
+      async fetch(req) {
+        const response = await handleRawMessage(req)
+        response.headers.set('Access-Control-Allow-Origin', '*')
+        return response
+      }
+    })
+    console.log(`Listening on ${server.url}`)
   }
-})
-
-console.log(`Listening on ${server.url}`)
+})()

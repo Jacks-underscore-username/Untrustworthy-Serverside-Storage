@@ -1,2 +1,4 @@
+node_modules
 biome.jsonc
 jsconfig.json
+server/data
