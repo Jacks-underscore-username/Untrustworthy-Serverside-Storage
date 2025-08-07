@@ -267,7 +267,7 @@ const handleVerifiedRequest = async (request, connection, user) => {
         }
       }
       func()
-      setInterval(func, 1000)
+      setInterval(func, 10000)
     })
     console.log(`Connected to relay at ${config.relayAddress}`)
   } else {

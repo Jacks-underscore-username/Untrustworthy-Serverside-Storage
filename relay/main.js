@@ -15,12 +15,15 @@ const socketServer = Bun.serve({
   async fetch(req, server) {
     const url = new URL(req.url)
     if (url.pathname === '/ws') {
-      const success = server.upgrade(req, {})
-      if (success) {
-        console.log(`WebSocket at port ${config.serverPort} upgraded successfully`)
-        return undefined
+      if (serverSocket === undefined || serverSocket.readyState !== 1) {
+        const success = server.upgrade(req, {})
+        if (success) {
+          console.log(`WebSocket at port ${config.serverPort} upgraded successfully`)
+          return undefined
+        }
+        return new Response(`WebSocket upgrade failed at port ${config.serverPort}`, { status: 500 })
       }
-      return new Response(`WebSocket upgrade failed at port ${config.serverPort}`, { status: 500 })
+      console.log(`Socket tried to upgrade at port ${config.serverPort} when a socket was already connected`)
     }
     return
   },
@@ -32,8 +35,10 @@ const socketServer = Bun.serve({
       }
     },
     open: ws => {
-      console.log(`Socket connected at port ${config.serverPort}`)
-      serverSocket = ws
+      if (serverSocket === undefined || serverSocket.readyState !== 1) {
+        console.log(`Socket connected at port ${config.serverPort}`)
+        serverSocket = ws
+      } else console.log(`Socket tried to connect at port ${config.serverPort} when a socket was already connected`)
     }
   }
 })
