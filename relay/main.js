@@ -25,7 +25,7 @@ const socketServer = Bun.serve({
       }
       console.log(`Socket tried to upgrade at port ${config.serverPort} when a socket was already connected`)
     }
-    return
+    return new Response()
   },
   websocket: {
     message: (ws, message) => {
