@@ -1,3 +1,6 @@
 {
-  "ports": [3005]
+  "ports": [3005],
+  "useCert": true,
+  "certPath": "../superSecretKeys/itztli.creationix.com.cer",
+  "keyPath": "../superSecretKeys/itztli.creationix.com.key"
 }

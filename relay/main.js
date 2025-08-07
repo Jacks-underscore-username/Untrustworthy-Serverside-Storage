@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 
 /**
- * @typedef {{ ports: string[] }} ServerConfig
+ * @typedef {{ ports: string[] } & ({ useCert: false | undefined } | { useCert: true, certPath: string, keyPath: string })} ServerConfig
  */
 
 const config = /** @type {ServerConfig} */ (JSON.parse(fs.readFileSync('./config.json', 'utf8')))
@@ -45,7 +45,10 @@ for (const port of config.ports) {
         console.log(`Socket connected at port ${port}`)
         serverSocket = ws
       }
-    }
+    },
+    ...(config.useCert
+      ? { tls: { cert: fs.readFileSync(config.certPath, 'utf-8'), key: fs.readFileSync(config.keyPath, 'utf8') } }
+      : {})
   })
   console.log(`Listening on ${server.url}`)
 }

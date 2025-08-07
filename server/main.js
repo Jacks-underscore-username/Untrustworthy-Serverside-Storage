@@ -37,7 +37,7 @@ const path = require('node:path')
  */
 
 /**
- * @typedef {{ port: number, useRelay: false | undefined } | { useRelay: true, relayAddress: string }} ServerConfig
+ * @typedef {({ port: number, useRelay: false | undefined } & ({ useCert: false | undefined } | { useCert: true, certPath: string, keyPath: string })) | { useRelay: true, relayAddress: string }} ServerConfig
  */
 
 const config = /** @type {ServerConfig} */ (JSON.parse(fs.readFileSync('./config.json', 'utf8')))
@@ -277,7 +277,10 @@ const handleVerifiedRequest = async (request, connection, user) => {
         const response = await handleRawMessage(req)
         response.headers.set('Access-Control-Allow-Origin', '*')
         return response
-      }
+      },
+      ...(config.useCert
+        ? { tls: { cert: fs.readFileSync(config.certPath, 'utf-8'), key: fs.readFileSync(config.keyPath, 'utf8') } }
+        : {})
     })
     console.log(`Listening on ${server.url}`)
   }
