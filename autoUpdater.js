@@ -22,19 +22,20 @@ const startPath = process.cwd()
     process.chdir(path.join(startPath, mode))
     console.log(`Running ${mode}`)
     const child = spawn('bun main.js', { stdio: 'inherit', shell: true })
-    await new Promise(resolve => {
-      const intervalId = setInterval(async () => {
+    process.on('exit', () => child.kill())
+    await new Promise(async resolve => {
+      while (true) {
         const currentHash = (
           await axios.get(
             'https://api.github.com/repos/Jacks-underscore-username/Untrustworthy-Serverside-Storage/branches/main'
           )
         ).data.commit.sha
         if (lastHash !== currentHash) {
-          clearInterval(intervalId)
           child.kill()
           resolve(undefined)
         }
-      }, 5000)
+        await new Promise(r => setTimeout(r, 5_000))
+      }
     })
   }
 })()
