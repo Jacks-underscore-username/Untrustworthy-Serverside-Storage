@@ -34,7 +34,7 @@ const startPath = process.cwd()
           child.kill()
           resolve(undefined)
         }
-        await new Promise(r => setTimeout(r, 5_000))
+        await new Promise(r => setTimeout(r, 15_000))
       }
     })
   }
