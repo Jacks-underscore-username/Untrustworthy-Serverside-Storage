@@ -50,12 +50,26 @@ const clientServer = Bun.serve({
   async fetch(req) {
     if (serverSocket === undefined || serverSocket.readyState !== 1)
       return console.error(`Queried before websocket was connected at port ${config.clientPort}`)
+    const requestedHeaders = req.headers.get('Access-Control-Request-Headers') || ''
+
+    if (req.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': `Content-Type, ${requestedHeaders}`,
+          'Access-Control-Max-Age': '86400'
+        }
+      })
+    }
+
     const response = await new Promise(async resolve => {
       messagePromise = resolve
-      if (req.method === 'OPTIONS') return resolve(new Response(null, { status: 204 }))
       const message = await req.text()
       serverSocket?.send(message)
     })
+
     response.headers.set('Access-Control-Allow-Origin', '*')
     return response
   },
