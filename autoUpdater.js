@@ -34,8 +34,10 @@ const startPath = process.cwd()
           child.kill()
           resolve(undefined)
         }
-        await new Promise(r => setTimeout(r, 15_000))
+        await new Promise(r => setTimeout(r, 60_000))
       }
     })
+    console.log('Waiting 15 seconds to be safe')
+    await new Promise(r => setTimeout(r, 15_000))
   }
 })()
