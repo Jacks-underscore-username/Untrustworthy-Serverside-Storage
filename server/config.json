@@ -1,4 +1,4 @@
 {
   "useRelay": true,
-  "relayAddress": "ws://localhost:3010/ws"
+  "relayAddress": "ws://170.205.31.42:3010/ws"
 }
