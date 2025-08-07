@@ -256,10 +256,6 @@ const handleVerifiedRequest = async (request, connection, user) => {
             const response = await handleRawMessageFromSocket(message)
             currentSocket.send(response)
           }
-          const handle = setInterval(() => {
-            if (lastSocket === undefined || lastSocket.readyState !== 1) clearInterval(handle)
-            else lastSocket.send('ping')
-          }, 3000)
           if (hasResolved) currentSocket = lastSocket
           else {
             hasResolved = true
