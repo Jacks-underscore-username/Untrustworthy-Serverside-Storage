@@ -34,6 +34,14 @@ const socketServer = Bun.serve({
     open: ws => {
       console.log(`Socket connected at port ${config.serverPort}`)
       serverSocket = ws
+      const handle = setInterval(() => {
+        if (ws.readyState !== 1) clearInterval(handle)
+        else ws.ping()
+      }, 3000)
+    },
+    close: () => {
+      console.log(`Socket closed at ${config.serverPort}`)
+      serverSocket = undefined
     }
   }
 })

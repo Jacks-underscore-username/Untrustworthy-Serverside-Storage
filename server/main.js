@@ -256,6 +256,10 @@ const handleVerifiedRequest = async (request, connection, user) => {
             const response = await handleRawMessageFromSocket(message)
             currentSocket.send(response)
           }
+          const handle = setInterval(() => {
+            if (lastSocket === undefined || lastSocket.readyState !== 1) clearInterval(handle)
+            else lastSocket.send('ping')
+          }, 3000)
           if (hasResolved) currentSocket = lastSocket
           else {
             hasResolved = true
@@ -267,7 +271,7 @@ const handleVerifiedRequest = async (request, connection, user) => {
         }
       }
       func()
-      setInterval(func, 10000)
+      setInterval(func, 3000)
     })
     console.log(`Connected to relay at ${config.relayAddress}`)
   } else {
