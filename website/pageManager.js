@@ -2,8 +2,8 @@
  * @typedef {Object} PageApi
  * @prop {(name: string) => void} goto
  * @prop {import('./security.js')} rawUss
- * @prop {import('./security.js').VFS} vfs
- * @prop {(vfs: import('./security.js').VFS) => void} setVfs
+ * @prop {import('./types.d.js').VFS} vfs
+ * @prop {(vfs: import('./types.d.js').VFS) => void} setVfs
  * @prop {Page[]} allPages
  * @prop {import('./shared.js')} shared
  * @prop {Object<string, boolean>} TEST_FLAGS
@@ -21,6 +21,8 @@ import homePage from './pages/home.js'
 import loginPage from './pages/login.js'
 import rawPage from './pages/raw.js'
 import explorerPage from './pages/explorer.js'
+import downloadPage from './pages/download.js'
+import uploadPage from './pages/upload.js'
 
 import * as uss from './security.js'
 
@@ -35,11 +37,11 @@ const TEST_FLAGS = {
 }
 if (TEST_FLAGS.DISABLE_TEST_FLAGS) for (const key of Object.keys(TEST_FLAGS)) TEST_FLAGS[key] = false
 
-/** @type {import('./security.js').VFS | undefined} */
+/** @type {import('./types.d.js').VFS | undefined} */
 let vfs = undefined
 
 /** @type {Page[]} */
-const pages = [homePage, loginPage, rawPage, explorerPage]
+const pages = [homePage, loginPage, rawPage, explorerPage, downloadPage, uploadPage]
 
 /** @type {Object<string, string>} */
 const pageContents = {}

@@ -1,3 +1,7 @@
+/**
+ * @import * as Types from "./types.d.js"
+ */
+
 const ERRORS = {
   MISSING_FILE: 'Missing file "$P"',
   MISSING_FOLDER: 'Missing folder "$P"',
@@ -12,7 +16,7 @@ const ERRORS = {
  * 3 - all messaging
  * 4 - encrypted data + everything else
  */
-const LOGGING_LEVEL = 0
+const LOGGING_LEVEL = 4
 
 /** Assumes no files will change on the server unless told to by this client */
 const ASSUME_SINGLE_CLIENT = false
@@ -35,7 +39,7 @@ const makeKeyPair = () => crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 
  * @param {string} username
  * @param {string} password
  * @param {string} [service]
- * @returns {Promise<import("./types.d").VFS>}
+ * @returns {Promise<Types.VFS>}
  */
 export const connectToServer = async (address, username, password, service = '') => {
   if (address.origin === 'null') address = new URL(`http://${address.toString()}`)
@@ -174,8 +178,9 @@ export const connectToServer = async (address, username, password, service = '')
   if (LOGGING_LEVEL >= 1) console.log('Derived secret key material')
 
   /**
-   * @param {any} data
-   * @returns {Promise<string>}
+   * @template T
+   * @param {T} data
+   * @returns {Promise<Types.Json<Types.Encrypted<T>>>}
    */
   const encryptData = async data => {
     const iv = window.crypto.getRandomValues(new Uint8Array(12))
@@ -197,21 +202,47 @@ export const connectToServer = async (address, username, password, service = '')
       key,
       new TextEncoder().encode(JSON.stringify(data))
     )
-    const result = JSON.stringify({
-      iv: arrayBufferToBase64(iv),
-      salt: arrayBufferToBase64(salt),
-      encryptedData: arrayBufferToBase64(encryptedData)
-    })
+    const result =
+      /** @type {Types.Json<Types.Encrypted<T>>} */
+      (
+        JSON.stringify({
+          seed,
+          iv: arrayBufferToBase64(iv),
+          salt: arrayBufferToBase64(salt),
+          encryptedData: arrayBufferToBase64(encryptedData)
+        })
+      )
     if (LOGGING_LEVEL >= 4) console.log(`Encrypted data: ${JSON.stringify(data)} -> ${result}`)
     return result
   }
 
   /**
-   * @param {string} encryptedData
-   * @returns {Promise<any>}
+   * @template T
+   * @param {Types.Json<Types.Encrypted<T>>} encryptedData
+   * @returns {Promise<T>}
    */
   const decryptData = async encryptedData => {
-    const { iv, salt, encryptedData: realEncryptedData } = JSON.parse(encryptedData)
+    const parsed = JSON.parse(encryptedData)
+    const localKeyMaterial =
+      parsed.seed === undefined
+        ? keyMaterial
+        : await window.crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(
+              arrayBufferToBase64(
+                new Uint8Array(
+                  await crypto.subtle.digest(
+                    'SHA-512',
+                    new TextEncoder().encode([parsed.seed, service, username, password].join(''))
+                  )
+                )
+              )
+            ),
+            'PBKDF2',
+            false,
+            ['deriveBits', 'deriveKey']
+          )
+    const { iv, salt, encryptedData: realEncryptedData } = parsed
     const key = await window.crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
@@ -219,7 +250,7 @@ export const connectToServer = async (address, username, password, service = '')
         iterations: 100000,
         hash: 'SHA-256'
       },
-      keyMaterial,
+      localKeyMaterial,
       { name: 'AES-GCM', length: 256 },
       true,
       ['encrypt', 'decrypt']
@@ -293,19 +324,17 @@ export const connectToServer = async (address, username, password, service = '')
   /** @type {string} */
   let lastIndexHash = ''
 
-  /** @type {import("./types.d").Index | undefined} */
+  /** @type {Types.Index | undefined} */
   let lastIndex = undefined
 
-  /**
-   * @returns {Promise<import("./types.d").Index>}
-   */
+  /** @type {Types.VFS["getIndex"]} */
   const getIndex = async () => {
     if (ASSUME_SINGLE_CLIENT && lastIndex !== undefined) {
       if (LOGGING_LEVEL >= 3) console.log('Got cached VFS index')
       return lastIndex
     }
     if (LOGGING_LEVEL >= 3) console.log('Getting VFS index')
-    /** @type {import("./types.d").Index} */
+    /** @type {Types.Index} */
     let index = {
       type: 'folder',
       contents: {}
@@ -318,10 +347,7 @@ export const connectToServer = async (address, username, password, service = '')
     return index
   }
 
-  /**
-   * @param {import("./types.d").Index} index
-   * @returns {Promise<void>}
-   */
+  /** @type {Types.VFS["saveIndex"]} */
   const saveIndex = async index => {
     if (ASSUME_SINGLE_CLIENT) lastIndex = index
     const hash = await quickHash(JSON.stringify(index))
@@ -335,11 +361,11 @@ export const connectToServer = async (address, username, password, service = '')
   }
 
   /**
-   * @param {import("./types.d").Index} index
+   * @param {Types.Index} index
    * @param {string} fileHash
    * @param {string} [folderPath]
    * @param {string[]} [excludePaths]
-   * @returns {{ folder: import("./types.d").Index, file: import("./types.d").Index_file, filePath: string } | undefined}
+   * @returns {{ folder: Types.Index, file: Types.Index_file, filePath: string } | undefined}
    */
   const findFileByHash = (index, fileHash, folderPath, excludePaths = []) => {
     for (const [name, entry] of Object.entries(index.contents)) {
@@ -355,11 +381,11 @@ export const connectToServer = async (address, username, password, service = '')
   }
 
   /**
-   * @param {import("./types.d").Index} index
+   * @param {Types.Index} index
    * @param {string} folderPath
    * @param {boolean} [makeFolders]
    * @param {boolean} [softFail]
-   * @returns {import("./types.d").Index | undefined}
+   * @returns {Types.Index | undefined}
    */
   const getIndexFolder = (index, folderPath, makeFolders = false, softFail = false) => {
     if (!folderPath.length) return index
@@ -377,11 +403,7 @@ export const connectToServer = async (address, username, password, service = '')
     return parentFolder
   }
 
-  /**
-   * @param {string} filePath
-   * @param {any} data
-   * @returns {Promise<void>}
-   */
+  /** @type {Types.VFS["saveFile"]} */
   const saveFile = async (filePath, data) => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
@@ -422,10 +444,7 @@ export const connectToServer = async (address, username, password, service = '')
     }
   }
 
-  /**
-   * @param {string} filePath
-   * @returns {Promise<any>}
-   */
+  /** @type {Types.VFS["getFile"]} */
   const getFile = async filePath => {
     if (LOGGING_LEVEL >= 1) console.log(`Getting file with VFS: ${filePath}`)
     const index = await getIndex()
@@ -440,10 +459,7 @@ export const connectToServer = async (address, username, password, service = '')
     if (entry.type === 'file') return await baseGetFile(entry.hash)
   }
 
-  /**
-   * @param {string} filePath
-   * @returns {Promise<void>}
-   */
+  /** @type {Types.VFS["deleteFile"]} */
   const deleteFile = async filePath => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
@@ -473,10 +489,7 @@ export const connectToServer = async (address, username, password, service = '')
     await saveIndex(index)
   }
 
-  /**
-   * @param {string} filePath
-   * @returns {Promise<boolean>}
-   */
+  /** @type {Types.VFS["doesFileExist"]} */
   const doesFileExist = async filePath => {
     const index = await getIndex()
     const splitPath = filePath.split('/')
@@ -493,31 +506,146 @@ export const connectToServer = async (address, username, password, service = '')
     return result
   }
 
-  /** @type {{func: function, args: any[], resolve: any}[]} */
-  const queue = []
+  /**
+   * @overload
+   * @param {string[]} filePaths
+   * @param {false} [encrypt]
+   * @returns {Promise<Types.Json<Types.Exported_files>>}
+   */
+  /**
+   * @overload
+   * @param {string[]} filePaths
+   * @param {true} encrypt
+   * @returns {Promise<Types.Json<Types.Encrypted<Types.Exported_files>>>}
+   */
+  /**
+   * @param {string[]} filePaths
+   * @param {boolean} [encrypt]
+   */
+  const exportFiles = async (filePaths, encrypt) => {
+    /** @type {Object<string, string>} */
+    const pathToHashMap = {}
+    /** @type {Object<string, string>} */
+    const hashToFileMap = {}
+    for (const path of filePaths) {
+      const file = await getFile(path)
+      const hash = await quickHash(file)
+      pathToHashMap[path] = hash
+      hashToFileMap[hash] = file
+    }
+    /** @type {Types.Exported_files} */
+    const result = {
+      pathToHashMap,
+      hashToFileMap
+    }
+    if (!encrypt) return JSON.stringify(result)
+    return await encryptData(result)
+  }
 
   /**
-   * @template T
-   * @param {T extends function ? T : never} func
-   * @returns {T extends function ? T : never}
+   * @overload
+   * @param {Types.Json<Types.Exported_files>} files
+   * @param {false} [encrypted]
+   * @returns {Promise<string[]>}
+   */
+  /**
+   * @overload
+   * @param {Types.Json<Types.Encrypted<Types.Exported_files>>} files
+   * @param {true} encrypted
+   * @returns {Promise<string[]>}
+   */
+  /**
+   * @param {Types.Json<Types.Exported_files | Types.Encrypted<Types.Exported_files>>} files
+   * @param {boolean} [encrypted]
+   * @returns {Promise<string[]>}
+   */
+
+  const importFiles = async (files, encrypted = false) => {
+    /** @type {Types.Exported_files} */
+    // @ts-expect-error
+    const exported = encrypted ? await decryptData(files) : JSON.parse(files)
+    for (const [filePath, hash] of Object.entries(exported.pathToHashMap))
+      await saveFile(filePath, exported.hashToFileMap[hash])
+    return Object.keys(exported.pathToHashMap)
+  }
+  /**
+   * @template {(...args: any) => any} T
+   * @typedef {{ func: T, args: Parameters<T>, resolveFunc: (value: ReturnType<T>) => void, funcName: string }} Queue_entry
+   * @type {Queue_entry<(...args: any) => any>[]}
+   */
+  const queue = []
+  let isQueueRunning = false
+
+  /**
+   * @template {(...args: any) => Promise<any>} T
+   * @param {T} func
+   * @returns {(...args:Parameters<T>) => Promise<Awaited<ReturnType<T>>>}
    */
   const wrapInQueue =
     func =>
-    // @ts-expect-error
     (...args) => {
-      let resolve
-      const promise = new Promise(subResolve => (resolve = subResolve))
-      queue.push({ func, args, resolve })
-      if (queue.length === 1) tickQueue()
+      const promise = new Promise(resolveFunc => {
+        const entry = { func, args, resolveFunc, funcName: func.name }
+        optimizeQueue(entry)
+        queue.push(entry)
+        if (!isQueueRunning) tickQueue()
+      })
       return promise
     }
 
+  /**
+   * @param {Queue_entry<(...args: any) => any>} newEntry
+   */
+  const optimizeQueue = newEntry => {
+    if (newEntry.funcName === 'saveFile')
+      for (const entry of queue) {
+        if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
+          entry.resolveFunc(undefined)
+          queue.splice(queue.indexOf(entry), 1)
+          break
+        }
+      }
+    if (newEntry.funcName === 'getFile')
+      for (const entry of queue.toReversed()) {
+        if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
+          newEntry.resolveFunc(entry.args[1])
+          queue.splice(queue.indexOf(newEntry), 1)
+          break
+        }
+        if (entry.funcName === 'deleteFile' && entry.args[0] === newEntry.args[0])
+          throw new Error('Queue entry will try to read a file that does not exist')
+      }
+    if (newEntry.funcName === 'deleteFile')
+      for (const entry of queue) {
+        if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
+          entry.resolveFunc(undefined)
+          queue.splice(queue.indexOf(entry), 1)
+          break
+        }
+      }
+    if (newEntry.funcName === 'doesFileExist')
+      for (const entry of queue.toReversed()) {
+        if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
+          newEntry.resolveFunc(true)
+          queue.splice(queue.indexOf(newEntry), 1)
+          break
+        }
+        if (entry.funcName === 'deleteFile' && entry.args[0] === newEntry.args[0]) {
+          newEntry.resolveFunc(false)
+          queue.splice(queue.indexOf(newEntry), 1)
+          break
+        }
+      }
+  }
+
   const tickQueue = async () => {
-    const entry = queue[0]
+    isQueueRunning = true
+    const entry = queue.shift()
+    if (entry === undefined) throw new Error('Uh oh')
     const result = await entry.func(...entry.args)
-    entry.resolve(result)
-    queue.shift()
+    entry.resolveFunc(result)
     if (queue.length) tickQueue()
+    else isQueueRunning = false
   }
 
   return {
@@ -527,6 +655,8 @@ export const connectToServer = async (address, username, password, service = '')
     getIndex: wrapInQueue(getIndex),
     saveIndex: wrapInQueue(saveIndex),
     doesFileExist: wrapInQueue(doesFileExist),
+    exportFiles: wrapInQueue(exportFiles),
+    importFiles: wrapInQueue(importFiles),
     joinPaths,
     quickHash
   }

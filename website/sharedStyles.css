@@ -13,15 +13,18 @@
   --error-3: hsl(var(--error-hue), 100%, 75%);
   --text-color: #fff;
 
-  --move-timing: cubic-bezier(0.65, 0.05, 0.36, 1);
   --color-timing: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --small-move-timing: cubic-bezier(0.65, 0.05, 0.36, 1);
+  --big-move-timing: cubic-bezier(0.65, 0.05, 0.36, 1);
 
-  --move-time: 0.15s;
   --color-time: 0.25s;
+  --small-move-time: 0.15s;
+  --big-move-time: 0.50s;
 
   --do-timing: 1;
   --do-color-timing: calc(1 * var(--do-timing));
-  --do-move-timing: calc(1 * var(--do-timing));
+  --do-small-move-timing: calc(1 * var(--do-timing));
+  --do-big-move-timing: calc(1 * var(--do-timing));
   --do-rounding: 1;
 
   --border-size: 0.25;
@@ -88,12 +91,11 @@ svg {
 
 html,
 body {
-  width: unset;
-  height: unset;
-  min-width: 100vh;
-  min-height: 100vh;
-  padding: 0;
+  height: 100%;
+  width: 100%;
   margin: 0;
+  padding: 0;
+  overflow: hidden;
   background-color: var(--background-color);
 }
 
@@ -102,15 +104,30 @@ body {
   flex-direction: column;
 }
 
+#nav_bar_wrapper {
+  padding: 0;
+  margin: 0;
+  min-width: 100%;
+  transform: translateY(0);
+  height: calc(var(--size) * 8);
+  transition: all calc(var(--big-move-time) * var(--do-big-move-timing))
+    var(--big-move-timing);
+}
+
 #nav_bar {
   display: flex;
   min-width: 100%;
+  height: calc(var(--size) * 8);
   justify-content: space-around;
   align-items: center;
   background-color: var(--foreground-color);
-  padding: var(--size);
   border-bottom: calc(var(--size) * var(--border-size)) solid
     var(--border-color);
+}
+
+#nav_bar_wrapper.hidden {
+  height: 0;
+  transform: translateY(calc(-1 * var(--size) * 8));
 }
 
 #nav_bar .item svg {
@@ -132,21 +149,36 @@ body {
 
   transform: scale(1);
 
+  filter: blur(0);
+
   transition: border-color calc(var(--color-time) * var(--do-color-timing))
     var(--color-timing), transform
-    calc(var(--move-time) * var(--do-move-timing)) var(--move-timing);
+    calc(var(--small-move-time) * var(--do-small-move-timing))
+    var(--small-move-timing), color
+    calc(var(--color-time) * var(--do-color-timing)) var(--color-timing), filter
+    calc(var(--color-time) * var(--do-color-timing)) var(--color-timing);
 }
 
-.button:hover {
+.button:disabled {
+  color: var(--text-color);
+  filter: blur(calc(var(--size) * 0.1));
+}
+
+.button:hover:not(:disabled) {
   border-color: var(--highlight-2);
   transform: scale(1.1);
 }
 
 #page {
-  flex: 1;
+  width: 100%;
+  flex-grow: 1;
+  min-height: 0;
+
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
+  overflow: hidden;
 }
 
 input[type="checkbox"] {
@@ -171,8 +203,8 @@ input[type="checkbox"]::before {
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
   filter: blur(calc(var(--size) * 2));
   background-color: var(--highlight-2);
-  transition: filter calc(var(--do-move-timing) * var(--move-time))
-    var(--move-timing);
+  transition: filter calc(var(--do-small-move-timing) * var(--small-move-time))
+    var(--small-move-timing);
 }
 
 input[type="checkbox"]:checked::before {
@@ -189,4 +221,48 @@ input::placeholder,
 textarea::placeholder {
   color: #fff;
   font-style: italic;
+}
+
+.flex,
+.flex-column {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--size);
+  gap: var(--size);
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.text {
+  color: var(--text-color);
+}
+
+.tooltipped {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltipped > * {
+  white-space: nowrap;
+  position: absolute;
+  background-color: var(--background-color);
+  padding: var(--size);
+  left: 50%;
+  top: 50%;
+  transform: translateX(-50%) translateY(-50%) scale(0);
+  filter: blur(var(--size));
+  transition: transform
+    calc(var(--small-move-time) * var(--do-small-move-timing))
+    var(--small-move-timing), filter
+    calc(var(--small-move-time) * var(--do-small-move-timing))
+    var(--small-move-timing);
+}
+
+.tooltipped:hover > *,
+.tooltipped > *:hover {
+  transform: translateX(-50%) translateY(-50%) scale(1);
+  filter: blur(0);
 }
