@@ -22,6 +22,10 @@
 * ***Parameters***: `{ data: any }`
 * ***Returns***: `[the same data]`
 
+#### batch
+* ***Parameters***: `{ commands: (commands)[] }`
+* ***Returns***: `{ results: (command results)[] }`
+
 ### Files
 #### get_file
 * ***Parameters***: `{ file_name: string }`
