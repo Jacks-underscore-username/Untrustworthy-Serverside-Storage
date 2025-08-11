@@ -33,7 +33,7 @@ const path = require('node:path')
  * @typedef {Object} Request_delete_file
  * @prop {'delete_file'} command
  * @prop {string} file_name
- * @typedef {Request_new_connection | Request_encrypted | Request_echo | Request_get_seed | Request_prove_seed | Request_get_file | Request_save_file | Request_delete_file} Request
+ * @typedef { Request_new_connection | Request_encrypted | Request_echo | Request_get_seed | Request_prove_seed | Request_get_file | Request_save_file | Request_delete_file } Request
  */
 
 /**
@@ -221,6 +221,7 @@ const handleUnverifiedRequest = async (request, connection) => {
  */
 const handleVerifiedRequest = async (request, connection, user) => {
   user.lastOnline = Date.now()
+  if (request.command === 'echo') return request.data
   if (request.command === 'get_file') {
     if (fs.existsSync(path.join('data', user.username, `${request.file_name}.enc`)))
       return {
