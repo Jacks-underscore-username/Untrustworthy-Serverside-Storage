@@ -16,7 +16,7 @@ const ERRORS = {
  * 3 - all messaging
  * 4 - encrypted data + everything else
  */
-const LOGGING_LEVEL = 4
+const LOGGING_LEVEL = 0
 
 /** Assumes no files will change on the server unless told to by this client */
 const ASSUME_SINGLE_CLIENT = false
@@ -327,38 +327,44 @@ export const connectToServer = async (address, username, password, service = '')
   /** @type {Types.Index | undefined} */
   let lastIndex = undefined
 
-  /** @type {Types.VFS["getIndex"]} */
-  const getIndex = async () => {
-    if (ASSUME_SINGLE_CLIENT && lastIndex !== undefined) {
-      if (LOGGING_LEVEL >= 3) console.log('Got cached VFS index')
-      return lastIndex
+  /** @type {Types.EarlyReturnFunc<Types.VFS["getIndex"]>} */
+  const getIndex = () => ({
+    earlyReturn: false,
+    next: async () => {
+      if (ASSUME_SINGLE_CLIENT && lastIndex !== undefined) {
+        if (LOGGING_LEVEL >= 3) console.log('Got cached VFS index')
+        return lastIndex
+      }
+      if (LOGGING_LEVEL >= 3) console.log('Getting VFS index')
+      /** @type {Types.Index} */
+      let index = {
+        type: 'folder',
+        contents: {}
+      }
+      try {
+        index = await baseGetFile('index.json')
+      } catch (err) {
+        await normalizeEarlyReturnFunc(saveIndex(index))
+      }
+      return index
     }
-    if (LOGGING_LEVEL >= 3) console.log('Getting VFS index')
-    /** @type {Types.Index} */
-    let index = {
-      type: 'folder',
-      contents: {}
-    }
-    try {
-      index = await baseGetFile('index.json')
-    } catch (err) {
-      await saveIndex(index)
-    }
-    return index
-  }
+  })
 
-  /** @type {Types.VFS["saveIndex"]} */
-  const saveIndex = async index => {
-    if (ASSUME_SINGLE_CLIENT) lastIndex = index
-    const hash = await quickHash(JSON.stringify(index))
-    if (hash === lastIndexHash) {
-      if (LOGGING_LEVEL >= 4) console.log('Skipped saving VFS index')
-      return
+  /** @type {Types.EarlyReturnFunc<Types.VFS["saveIndex"]>} */
+  const saveIndex = index => ({
+    earlyReturn: false,
+    next: async () => {
+      if (ASSUME_SINGLE_CLIENT) lastIndex = index
+      const hash = await quickHash(JSON.stringify(index))
+      if (hash === lastIndexHash) {
+        if (LOGGING_LEVEL >= 4) console.log('Skipped saving VFS index')
+        return
+      }
+      lastIndexHash = await quickHash(JSON.stringify(index))
+      if (LOGGING_LEVEL >= 3) console.log('Saving VFS index')
+      await baseSaveFile('index.json', index)
     }
-    lastIndexHash = await quickHash(JSON.stringify(index))
-    if (LOGGING_LEVEL >= 3) console.log('Saving VFS index')
-    await baseSaveFile('index.json', index)
-  }
+  })
 
   /**
    * @param {Types.Index} index
@@ -403,174 +409,9 @@ export const connectToServer = async (address, username, password, service = '')
     return parentFolder
   }
 
-  /** @type {Types.VFS["saveFile"]} */
-  const saveFile = async (filePath, data) => {
-    const index = await getIndex()
-    const splitPath = filePath.split('/')
-
-    const fileHash = await quickHash(JSON.stringify(data))
-    const findResult = findFileByHash(index, fileHash)
-
-    const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
-
-    const parentFolder = getIndexFolder(index, parentFolderPath, true)
-    if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
-    if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
-
-    let oldHash = undefined
-
-    const oldEntry = parentFolder.contents[splitPath[0]]
-    if (oldEntry !== undefined) {
-      if (oldEntry.type === 'folder')
-        throw new Error(fillError(ERRORS.FILE_IS_FOLDER, joinPaths(parentFolderPath, splitPath[0])))
-      oldHash = oldEntry.hash
-    }
-
-    if (findResult === undefined && oldHash !== fileHash) {
-      if (LOGGING_LEVEL >= 1) console.log(`Saving file to server: ${fileHash}`)
-      await baseSaveFile(fileHash, data)
-    }
-    parentFolder.contents[splitPath[0]] = {
-      type: 'file',
-      hash: fileHash
-    }
-    if (LOGGING_LEVEL >= 2) console.log(`Saved file to VFS: ${filePath}`)
-
-    await saveIndex(index)
-
-    if (oldHash !== undefined && oldHash !== fileHash) {
-      if (LOGGING_LEVEL >= 1) console.log(`Deleting old version of file: ${filePath} ${oldHash}`)
-      await baseDeleteFile(oldHash)
-    }
-  }
-
-  /** @type {Types.VFS["getFile"]} */
-  const getFile = async filePath => {
-    if (LOGGING_LEVEL >= 1) console.log(`Getting file with VFS: ${filePath}`)
-    const index = await getIndex()
-    const splitPath = filePath.split('/')
-    const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
-    const parentFolder = getIndexFolder(index, parentFolderPath)
-    if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
-    if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
-    const entry = parentFolder.contents[splitPath[0]]
-    if (entry === undefined) throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
-    if (entry.type === 'folder') throw new Error(fillError(ERRORS.FILE_IS_FOLDER, filePath))
-    if (entry.type === 'file') return await baseGetFile(entry.hash)
-  }
-
-  /** @type {Types.VFS["deleteFile"]} */
-  const deleteFile = async filePath => {
-    const index = await getIndex()
-    const splitPath = filePath.split('/')
-    const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
-    const parentFolder = getIndexFolder(index, parentFolderPath)
-    if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
-    if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
-    const entry = parentFolder.contents[splitPath[0]]
-    if (entry === undefined) throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
-    if (entry.type === 'folder') throw new Error(fillError(ERRORS.FILE_IS_FOLDER, filePath))
-    delete parentFolder.contents[splitPath[0]]
-    const findResult = findFileByHash(index, entry.hash)
-    if (findResult === undefined) {
-      if (LOGGING_LEVEL >= 1) console.log(`Deleting file from server: ${entry.hash}`)
-      await baseDeleteFile(entry.hash)
-    }
-    for (let subPath = filePath.split('/').slice(0, filePath.split('/').length - 1); subPath.length; subPath.pop()) {
-      const subParentFolder = getIndexFolder(index, subPath.join('/'))
-      if (subParentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, subPath.join('/')))
-      if (Object.keys(subParentFolder.contents).length) break
-      const subSubParentFolder = getIndexFolder(index, subPath.slice(0, subPath.length - 1).join('/'))
-      if (subSubParentFolder === undefined)
-        throw new Error(fillError(ERRORS.MISSING_FOLDER, subPath.slice(0, subPath.length - 1).join('/')))
-      if (LOGGING_LEVEL >= 2) console.log(`Deleting empty folder from VFS: ${subPath.join('/')}`)
-      delete subSubParentFolder.contents[subPath[subPath.length - 1]]
-    }
-    await saveIndex(index)
-  }
-
-  /** @type {Types.VFS["doesFileExist"]} */
-  const doesFileExist = async filePath => {
-    const index = await getIndex()
-    const splitPath = filePath.split('/')
-    const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'), undefined, true)
-    let result = undefined
-    if (parentFolder === undefined || parentFolder.type !== 'folder') result = false
-    if (result === undefined && parentFolder !== undefined) {
-      const entry = parentFolder.contents[splitPath[0]]
-      if (entry === undefined) return false
-      result = true
-    }
-    if (result === undefined) throw new Error('Uh oh')
-    if (LOGGING_LEVEL >= 2) console.log(`Checked for file at ${filePath} (it ${result ? 'exists' : 'does not exists'})`)
-    return result
-  }
-
-  /**
-   * @overload
-   * @param {string[]} filePaths
-   * @param {false} [encrypt]
-   * @returns {Promise<Types.Json<Types.Exported_files>>}
-   */
-  /**
-   * @overload
-   * @param {string[]} filePaths
-   * @param {true} encrypt
-   * @returns {Promise<Types.Json<Types.Encrypted<Types.Exported_files>>>}
-   */
-  /**
-   * @param {string[]} filePaths
-   * @param {boolean} [encrypt]
-   */
-  const exportFiles = async (filePaths, encrypt) => {
-    /** @type {Object<string, string>} */
-    const pathToHashMap = {}
-    /** @type {Object<string, string>} */
-    const hashToFileMap = {}
-    for (const path of filePaths) {
-      const file = await getFile(path)
-      const hash = await quickHash(file)
-      pathToHashMap[path] = hash
-      hashToFileMap[hash] = file
-    }
-    /** @type {Types.Exported_files} */
-    const result = {
-      pathToHashMap,
-      hashToFileMap
-    }
-    if (!encrypt) return JSON.stringify(result)
-    return await encryptData(result)
-  }
-
-  /**
-   * @overload
-   * @param {Types.Json<Types.Exported_files>} files
-   * @param {false} [encrypted]
-   * @returns {Promise<string[]>}
-   */
-  /**
-   * @overload
-   * @param {Types.Json<Types.Encrypted<Types.Exported_files>>} files
-   * @param {true} encrypted
-   * @returns {Promise<string[]>}
-   */
-  /**
-   * @param {Types.Json<Types.Exported_files | Types.Encrypted<Types.Exported_files>>} files
-   * @param {boolean} [encrypted]
-   * @returns {Promise<string[]>}
-   */
-
-  const importFiles = async (files, encrypted = false) => {
-    /** @type {Types.Exported_files} */
-    // @ts-expect-error
-    const exported = encrypted ? await decryptData(files) : JSON.parse(files)
-    for (const [filePath, hash] of Object.entries(exported.pathToHashMap))
-      await saveFile(filePath, exported.hashToFileMap[hash])
-    return Object.keys(exported.pathToHashMap)
-  }
   /**
    * @template {(...args: any) => any} T
-   * @typedef {{ func: T, args: Parameters<T>, resolveFunc: (value: ReturnType<T>) => void, funcName: string }} Queue_entry
+   * @typedef {{ func: T, args: Parameters<T>, resolveFuncs: ((value: ReturnType<T>) => void)[], funcName: string }} Queue_entry
    * @type {Queue_entry<(...args: any) => any>[]}
    */
   const queue = []
@@ -578,64 +419,293 @@ export const connectToServer = async (address, username, password, service = '')
 
   /**
    * @template {(...args: any) => Promise<any>} T
-   * @param {T} func
+   * @param {Types.EarlyReturnFunc<T>} func
    * @returns {(...args:Parameters<T>) => Promise<Awaited<ReturnType<T>>>}
    */
   const wrapInQueue =
     func =>
     (...args) => {
+      const earlyResult = func(...args)
+      if (earlyResult.earlyReturn) return earlyResult.value
       const promise = new Promise(resolveFunc => {
-        const entry = { func, args, resolveFunc, funcName: func.name }
-        optimizeQueue(entry)
-        queue.push(entry)
-        if (!isQueueRunning) tickQueue()
+        const entry = { func: earlyResult.next, args, resolveFuncs: [resolveFunc], funcName: func.name }
+        const addToQueue = optimizeQueue(entry)
+        if (addToQueue) {
+          queue.push(entry)
+          if (!isQueueRunning) tickQueue()
+        }
       })
       return promise
     }
 
+  /** @type {Object<string, string>} */
+  const cachedFiles = {}
+
+  const updatingCachedFiles = new Set()
+
+  /**
+   * @template {(...args: any) => any} T
+   * @param {ReturnType<Types.EarlyReturnFunc<T>>} funcReturn
+   * @returns {ReturnType<T>}
+   */
+  const normalizeEarlyReturnFunc = funcReturn => {
+    if (funcReturn.earlyReturn) return funcReturn.value
+    return funcReturn.next()
+  }
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["saveFile"]>} */
+  const saveFile = (filePath, data, cache = false) => ({
+    earlyReturn: false,
+    next: async () => {
+      if (cache) {
+        cachedFiles[filePath] = data
+        updatingCachedFiles.delete(filePath)
+      }
+
+      const index = await normalizeEarlyReturnFunc(getIndex())
+      const splitPath = filePath.split('/')
+
+      const fileHash = await quickHash(JSON.stringify(data))
+      const findResult = findFileByHash(index, fileHash)
+
+      const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
+
+      const parentFolder = getIndexFolder(index, parentFolderPath, true)
+      if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
+      if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
+
+      let oldHash = undefined
+
+      const oldEntry = parentFolder.contents[splitPath[0]]
+      if (oldEntry !== undefined) {
+        if (oldEntry.type === 'folder')
+          throw new Error(fillError(ERRORS.FILE_IS_FOLDER, joinPaths(parentFolderPath, splitPath[0])))
+        oldHash = oldEntry.hash
+      }
+
+      if (findResult === undefined && oldHash !== fileHash) {
+        if (LOGGING_LEVEL >= 1) console.log(`Saving file to server: ${fileHash}`)
+        await baseSaveFile(fileHash, data)
+      }
+      parentFolder.contents[splitPath[0]] = {
+        type: 'file',
+        hash: fileHash
+      }
+      if (LOGGING_LEVEL >= 2) console.log(`Saved file to VFS: ${filePath}`)
+
+      await normalizeEarlyReturnFunc(saveIndex(index))
+
+      if (oldHash !== undefined && oldHash !== fileHash) {
+        if (LOGGING_LEVEL >= 1) console.log(`Deleting old version of file: ${filePath} ${oldHash}`)
+        await baseDeleteFile(oldHash)
+      }
+    }
+  })
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["getFile"]>} */
+  const getFile = (filePath, skipCache = false) => {
+    if (LOGGING_LEVEL >= 1) console.log(`Getting file with VFS: ${filePath}`)
+
+    if (!skipCache && cachedFiles[filePath] !== undefined) {
+      updatingCachedFiles.add(filePath)
+      wrappedGetFile(filePath, true).then(result => {
+        if (updatingCachedFiles.has(filePath)) cachedFiles[filePath] = result
+        updatingCachedFiles.delete(filePath)
+      })
+      return { earlyReturn: true, value: Promise.resolve(cachedFiles[filePath]) }
+    }
+    return {
+      earlyReturn: false,
+      next: async () => {
+        const index = await normalizeEarlyReturnFunc(getIndex())
+        const splitPath = filePath.split('/')
+        const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
+        const parentFolder = getIndexFolder(index, parentFolderPath)
+        if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
+        if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
+        const entry = parentFolder.contents[splitPath[0]]
+        if (entry === undefined) throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
+        if (entry.type === 'folder') throw new Error(fillError(ERRORS.FILE_IS_FOLDER, filePath))
+        if (entry.type === 'file') return await baseGetFile(entry.hash)
+      }
+    }
+  }
+
+  const wrappedGetFile = wrapInQueue(getFile)
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["deleteFile"]>} */
+  const deleteFile = filePath => ({
+    earlyReturn: false,
+    next: async () => {
+      const index = await normalizeEarlyReturnFunc(getIndex())
+      const splitPath = filePath.split('/')
+      const parentFolderPath = splitPath.splice(0, splitPath.length - 1).join('/')
+      const parentFolder = getIndexFolder(index, parentFolderPath)
+      if (parentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, parentFolderPath))
+      if (parentFolder.type !== 'folder') throw new Error(fillError(ERRORS.FOLDER_IS_FILE, parentFolderPath))
+      const entry = parentFolder.contents[splitPath[0]]
+      if (entry === undefined) throw new Error(fillError(ERRORS.MISSING_FILE, filePath))
+      if (entry.type === 'folder') throw new Error(fillError(ERRORS.FILE_IS_FOLDER, filePath))
+      delete parentFolder.contents[splitPath[0]]
+      const findResult = findFileByHash(index, entry.hash)
+      if (findResult === undefined) {
+        if (LOGGING_LEVEL >= 1) console.log(`Deleting file from server: ${entry.hash}`)
+        await baseDeleteFile(entry.hash)
+      }
+      for (let subPath = filePath.split('/').slice(0, filePath.split('/').length - 1); subPath.length; subPath.pop()) {
+        const subParentFolder = getIndexFolder(index, subPath.join('/'))
+        if (subParentFolder === undefined) throw new Error(fillError(ERRORS.MISSING_FOLDER, subPath.join('/')))
+        if (Object.keys(subParentFolder.contents).length) break
+        const subSubParentFolder = getIndexFolder(index, subPath.slice(0, subPath.length - 1).join('/'))
+        if (subSubParentFolder === undefined)
+          throw new Error(fillError(ERRORS.MISSING_FOLDER, subPath.slice(0, subPath.length - 1).join('/')))
+        if (LOGGING_LEVEL >= 2) console.log(`Deleting empty folder from VFS: ${subPath.join('/')}`)
+        delete subSubParentFolder.contents[subPath[subPath.length - 1]]
+      }
+      await normalizeEarlyReturnFunc(saveIndex(index))
+    }
+  })
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["doesFileExist"]>} */
+  const doesFileExist = filePath => ({
+    earlyReturn: false,
+    next: async () => {
+      const index = await normalizeEarlyReturnFunc(getIndex())
+      const splitPath = filePath.split('/')
+      const parentFolder = getIndexFolder(index, splitPath.splice(0, splitPath.length - 1).join('/'), undefined, true)
+      let result = undefined
+      if (parentFolder === undefined || parentFolder.type !== 'folder') result = false
+      if (result === undefined && parentFolder !== undefined) {
+        const entry = parentFolder.contents[splitPath[0]]
+        if (entry === undefined) return false
+        result = true
+      }
+      if (result === undefined) throw new Error('Uh oh')
+      if (LOGGING_LEVEL >= 2)
+        console.log(`Checked for file at ${filePath} (it ${result ? 'exists' : 'does not exists'})`)
+      return result
+    }
+  })
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["exportFiles"]>} */
+  const exportFiles = filePaths => ({
+    earlyReturn: false,
+    next: async () => {
+      /** @type {Object<string, string>} */
+      const pathToHashMap = {}
+      /** @type {Object<string, string>} */
+      const hashToFileMap = {}
+      for (const path of filePaths) {
+        const file = await normalizeEarlyReturnFunc(getFile(path))
+        const hash = await quickHash(file)
+        pathToHashMap[path] = hash
+        hashToFileMap[hash] = file
+      }
+      /** @type {Types.Exported_files} */
+      const result = {
+        pathToHashMap,
+        hashToFileMap
+      }
+      return /** @type {Types.Json<Types.Exported_files>} */ (JSON.stringify(result))
+    }
+  })
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["exportEncryptedFiles"]>} */
+  const exportEncryptedFiles = filePaths => ({
+    earlyReturn: false,
+    next: async () => {
+      /** @type {Object<string, string>} */
+      const pathToHashMap = {}
+      /** @type {Object<string, string>} */
+      const hashToFileMap = {}
+      for (const path of filePaths) {
+        const file = await normalizeEarlyReturnFunc(getFile(path))
+        const hash = await quickHash(file)
+        pathToHashMap[path] = hash
+        hashToFileMap[hash] = file
+      }
+      /** @type {Types.Exported_files} */
+      const result = {
+        pathToHashMap,
+        hashToFileMap
+      }
+      return encryptData(result)
+    }
+  })
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["importFiles"]>} */
+  const importFiles = files => ({
+    earlyReturn: false,
+    next: async () => {
+      /** @type {Types.Exported_files} */
+      const exported = JSON.parse(files)
+      for (const [filePath, hash] of Object.entries(exported.pathToHashMap))
+        await normalizeEarlyReturnFunc(saveFile(filePath, exported.hashToFileMap[hash]))
+      return Object.keys(exported.pathToHashMap)
+    }
+  })
+
+  /** @type {Types.EarlyReturnFunc<Types.VFS["importEncryptedFiles"]>} */
+  const importEncryptedFiles = files => ({
+    earlyReturn: false,
+    next: async () => {
+      /** @type {Types.Exported_files} */
+      const exported = await decryptData(files)
+      for (const [filePath, hash] of Object.entries(exported.pathToHashMap))
+        await normalizeEarlyReturnFunc(saveFile(filePath, exported.hashToFileMap[hash]))
+      return Object.keys(exported.pathToHashMap)
+    }
+  })
+
   /**
    * @param {Queue_entry<(...args: any) => any>} newEntry
+   * @returns {boolean}
    */
   const optimizeQueue = newEntry => {
     if (newEntry.funcName === 'saveFile')
       for (const entry of queue) {
         if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
-          entry.resolveFunc(undefined)
+          for (const func of entry.resolveFuncs) func(undefined)
           queue.splice(queue.indexOf(entry), 1)
-          break
+          return true
         }
       }
     if (newEntry.funcName === 'getFile')
       for (const entry of queue.toReversed()) {
         if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
-          newEntry.resolveFunc(entry.args[1])
+          for (const func of entry.resolveFuncs) func(newEntry.args[1])
           queue.splice(queue.indexOf(newEntry), 1)
-          break
+          return true
         }
         if (entry.funcName === 'deleteFile' && entry.args[0] === newEntry.args[0])
           throw new Error('Queue entry will try to read a file that does not exist')
+        if (entry.funcName === 'getFile' && entry.args[0] === newEntry.args[0]) {
+          entry.resolveFuncs.push(...newEntry.resolveFuncs)
+          return false
+        }
       }
     if (newEntry.funcName === 'deleteFile')
       for (const entry of queue) {
         if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
-          entry.resolveFunc(undefined)
+          for (const func of entry.resolveFuncs) func(undefined)
           queue.splice(queue.indexOf(entry), 1)
-          break
+          return true
         }
       }
     if (newEntry.funcName === 'doesFileExist')
       for (const entry of queue.toReversed()) {
         if (entry.funcName === 'saveFile' && entry.args[0] === newEntry.args[0]) {
-          newEntry.resolveFunc(true)
+          for (const func of entry.resolveFuncs) func(true)
           queue.splice(queue.indexOf(newEntry), 1)
-          break
+          return true
         }
         if (entry.funcName === 'deleteFile' && entry.args[0] === newEntry.args[0]) {
-          newEntry.resolveFunc(false)
+          for (const func of entry.resolveFuncs) func(false)
           queue.splice(queue.indexOf(newEntry), 1)
-          break
+          return true
         }
       }
+    return true
   }
 
   const tickQueue = async () => {
@@ -643,7 +713,7 @@ export const connectToServer = async (address, username, password, service = '')
     const entry = queue.shift()
     if (entry === undefined) throw new Error('Uh oh')
     const result = await entry.func(...entry.args)
-    entry.resolveFunc(result)
+    for (const func of entry.resolveFuncs) func(result)
     if (queue.length) tickQueue()
     else isQueueRunning = false
   }
@@ -656,7 +726,9 @@ export const connectToServer = async (address, username, password, service = '')
     saveIndex: wrapInQueue(saveIndex),
     doesFileExist: wrapInQueue(doesFileExist),
     exportFiles: wrapInQueue(exportFiles),
+    exportEncryptedFiles: wrapInQueue(exportEncryptedFiles),
     importFiles: wrapInQueue(importFiles),
+    importEncryptedFiles: wrapInQueue(importEncryptedFiles),
     joinPaths,
     quickHash
   }
