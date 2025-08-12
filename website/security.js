@@ -644,26 +644,40 @@ export const connectToServer = async (address, username, password, service = '')
   })
 
   /** @type {Types.EarlyReturnFunc<Types.VFS["importFiles"]>} */
-  const importFiles = files => ({
+  const importFiles = (files, fakeFiles = []) => ({
     earlyReturn: false,
     next: async () => {
       /** @type {Types.Exported_files} */
       const exported = JSON.parse(files)
-      for (const [filePath, hash] of Object.entries(exported.pathToHashMap))
-        await normalizeEarlyReturnFunc(saveFile(filePath, exported.hashToFileMap[hash]))
-      return Object.keys(exported.pathToHashMap)
+      /** @type {Object<string, string>} */
+      const realFakeFiles = {}
+      for (const [filePath, hash] of Object.entries(exported.pathToHashMap)) {
+        if (fakeFiles.includes(filePath)) realFakeFiles[filePath] = exported.hashToFileMap[hash]
+        else await normalizeEarlyReturnFunc(saveFile(filePath, exported.hashToFileMap[hash]))
+      }
+      return {
+        importedFiles: Object.keys(exported.pathToHashMap).filter(path => !fakeFiles.includes(path)),
+        fakeFiles: realFakeFiles
+      }
     }
   })
 
   /** @type {Types.EarlyReturnFunc<Types.VFS["importEncryptedFiles"]>} */
-  const importEncryptedFiles = files => ({
+  const importEncryptedFiles = (files, fakeFiles = []) => ({
     earlyReturn: false,
     next: async () => {
       /** @type {Types.Exported_files} */
       const exported = await decryptData(files)
-      for (const [filePath, hash] of Object.entries(exported.pathToHashMap))
-        await normalizeEarlyReturnFunc(saveFile(filePath, exported.hashToFileMap[hash]))
-      return Object.keys(exported.pathToHashMap)
+      /** @type {Object<string, string>} */
+      const realFakeFiles = {}
+      for (const [filePath, hash] of Object.entries(exported.pathToHashMap)) {
+        if (fakeFiles.includes(filePath)) realFakeFiles[filePath] = exported.hashToFileMap[hash]
+        else await normalizeEarlyReturnFunc(saveFile(filePath, exported.hashToFileMap[hash]))
+      }
+      return {
+        importedFiles: Object.keys(exported.pathToHashMap).filter(path => !fakeFiles.includes(path)),
+        fakeFiles: realFakeFiles
+      }
     }
   })
 

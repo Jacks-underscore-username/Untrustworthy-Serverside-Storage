@@ -22,9 +22,9 @@
  * @prop {(fileName: string) => Promise<void>} deleteFile
  * @prop {(fileName: string) => Promise<boolean>} doesFileExist
  * @prop {(filePaths: string[], extraFiles?: Object<string, string>) => Promise<Json<Exported_files>>} exportFiles
- * @prop {(files: Json<Exported_files>) => Promise<string[]>} importFiles
+ * @prop {(files: Json<Exported_files>, fakeFiles?: string[]) => Promise<{importedFiles: string[], fakeFiles: Object<string, string>}>} importFiles
  * @prop {(filePaths: string[], extraFiles?: Object<string, string>) => Promise<Json<Encrypted<Exported_files>>>} exportEncryptedFiles
- * @prop {(files: Json<Encrypted<Exported_files>>) => Promise<string[]>} importEncryptedFiles
+ * @prop {(files: Json<Encrypted<Exported_files>>, fakeFiles?: string[]) => Promise<{importedFiles: string[], fakeFiles: Object<string, string>}>} importEncryptedFiles
  * @prop {(...args: string[]) => string} joinPaths
  * @prop {(data: string) => Promise<string>} quickHash
  */
