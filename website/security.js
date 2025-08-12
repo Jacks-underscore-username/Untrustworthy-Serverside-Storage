@@ -588,7 +588,7 @@ export const connectToServer = async (address, username, password, service = '')
   })
 
   /** @type {Types.EarlyReturnFunc<Types.VFS["exportFiles"]>} */
-  const exportFiles = filePaths => ({
+  const exportFiles = (filePaths, extraFiles = {}) => ({
     earlyReturn: false,
     next: async () => {
       /** @type {Object<string, string>} */
@@ -597,6 +597,11 @@ export const connectToServer = async (address, username, password, service = '')
       const hashToFileMap = {}
       for (const path of filePaths) {
         const file = await normalizeEarlyReturnFunc(getFile(path))
+        const hash = await quickHash(file)
+        pathToHashMap[path] = hash
+        hashToFileMap[hash] = file
+      }
+      for (const [path, file] of Object.entries(extraFiles)) {
         const hash = await quickHash(file)
         pathToHashMap[path] = hash
         hashToFileMap[hash] = file
@@ -611,7 +616,7 @@ export const connectToServer = async (address, username, password, service = '')
   })
 
   /** @type {Types.EarlyReturnFunc<Types.VFS["exportEncryptedFiles"]>} */
-  const exportEncryptedFiles = filePaths => ({
+  const exportEncryptedFiles = (filePaths, extraFiles = {}) => ({
     earlyReturn: false,
     next: async () => {
       /** @type {Object<string, string>} */
@@ -620,6 +625,11 @@ export const connectToServer = async (address, username, password, service = '')
       const hashToFileMap = {}
       for (const path of filePaths) {
         const file = await normalizeEarlyReturnFunc(getFile(path))
+        const hash = await quickHash(file)
+        pathToHashMap[path] = hash
+        hashToFileMap[hash] = file
+      }
+      for (const [path, file] of Object.entries(extraFiles)) {
         const hash = await quickHash(file)
         pathToHashMap[path] = hash
         hashToFileMap[hash] = file
